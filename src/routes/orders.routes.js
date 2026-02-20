@@ -1,0 +1,81 @@
+const express = require("express");
+const router = express.Router();
+const { orderLimiter } = require("../middlewares/rateLimiter");
+const allowRoles = require("../middlewares/role.middleware");
+const validate = require("../middlewares/validate.middleware");
+const {
+  createOrderSchema,
+  calculateOrderSchema,
+} = require("../validators/order.validator");
+const protect = require("../middlewares/auth.middleware");
+
+const {
+  createOrder,
+  getOrders,
+  getOrderById,
+  cancelOrder,
+  syncOrder,
+  calculateOrder,
+  editOrder,
+  listProviderOrders,
+  getProviderOrder,
+  getCourierInfo,
+  getClientProfile,
+  getBankCards,
+} = require("../controllers/orders.controller");
+
+// CREATE
+router.post(
+  "/create",
+  protect,
+  orderLimiter,
+  validate(createOrderSchema),
+  createOrder,
+);
+
+// router.post(
+//   "/",
+//   protect,
+//   orderLimiter,
+//   validate(createOrderSchema),
+//   createOrder,
+// );
+
+// LIST
+router.get("/list", protect, getOrders);
+
+// SINGLE
+router.get("/:id", protect, getOrderById);
+router.get("/:id/courier", protect, getCourierInfo);
+
+// ACTIONS
+router.post("/:id/cancel", protect, cancelOrder);
+router.get("/:id/sync", protect, allowRoles("Admin"), syncOrder);
+router.post(
+  "/calculate",
+  protect,
+  validate(calculateOrderSchema),
+  calculateOrder,
+);
+router.post("/:id/edit", protect, editOrder);
+
+// PROVIDER
+router.get("/provider/list", protect, allowRoles("Admin"), listProviderOrders);
+
+router.get(
+  "/provider/client-profile",
+  protect,
+  allowRoles("Admin"),
+  getClientProfile,
+);
+
+router.get("/provider/bank-cards", protect, allowRoles("Admin"), getBankCards);
+
+router.get(
+  "/provider/:orderId",
+  protect,
+  allowRoles("Admin"),
+  getProviderOrder,
+);
+
+module.exports = router;
