@@ -23,6 +23,12 @@ const {
   getClientProfile,
   getBankCards,
   getLabels,
+  getTracking,
+  getPOD,
+  getDocuments,
+  getPricingBreakdown,
+  getProviderHistory,
+  createBulkOrders,
 } = require("../controllers/orders.controller");
 
 // CREATE
@@ -34,31 +40,31 @@ router.post(
   createOrder,
 );
 
-// router.post(
-//   "/",
-//   protect,
-//   orderLimiter,
-//   validate(createOrderSchema),
-//   createOrder,
-// );
-
 // LIST
 router.get("/list", protect, getOrders);
 
 // SINGLE
 router.get("/:id", protect, getOrderById);
+
 router.get("/:id/courier", protect, getCourierInfo);
 
 // ACTIONS
 router.post("/:id/cancel", protect, cancelOrder);
+
 router.get("/:id/sync", protect, allowRoles("Admin"), syncOrder);
+
 router.post(
   "/calculate",
   protect,
   validate(calculateOrderSchema),
   calculateOrder,
 );
+
 router.post("/:id/edit", protect, editOrder);
+router.post("/bulk", protect, createBulkOrders);
+router.get("/:id/history", protect, getProviderHistory);
+
+router.get("/:id/pricing-breakdown", protect, getPricingBreakdown);
 
 // PROVIDER
 router.get("/provider/list", protect, allowRoles("Admin"), listProviderOrders);
@@ -73,6 +79,12 @@ router.get(
 router.get("/provider/bank-cards", protect, allowRoles("Admin"), getBankCards);
 
 router.get("/provider/labels", protect, allowRoles("Admin"), getLabels);
+
+router.get("/:id/tracking", protect, getTracking);
+
+router.get("/:id/pod", protect, getPOD);
+
+router.get("/:id/documents", protect, getDocuments);
 
 router.get(
   "/provider/:orderId",

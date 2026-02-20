@@ -7,7 +7,7 @@ const { mapCourierFromBorzo } = require("../mappers/borzoCourier.mapper");
 const verifyBorzoSignature = require("../utils/verifyBorzoSignature");
 const WebhookEvent = require("../models/WebhookEvent");
 const webhookFingerprint = require("../utils/webhookFingerprint");
-
+const { creditWallet } = require("../services/wallet.service");
 const borzoWebhook = async (req, res) => {
   try {
     // Verify signature
@@ -139,6 +139,25 @@ const borzoDeliveryWebhook = async (req, res) => {
     //  Map delivery status → internal status
     const mappedStatus = mapDeliveryStatus(delivery.status);
     order.status = transitionStatus(order.status, mappedStatus);
+
+    // COD Settlement on Delivered
+    if (
+      mappedStatus === "DELIVERED" &&
+      order.cod?.enabled === true &&
+      order.codSettled !== true
+    ) {
+      await creditWallet({
+        userId: order.user,
+        amount: order.cod.amount,
+        reason: "COD_ORDER_DELIVERED",
+        reference: order._id.toString(),
+        metadata: {
+          borzoOrderId: order.borzoOrderId,
+        },
+      });
+
+      order.codSettled = true;
+    }
 
     if (
       order.statusHistory.length === 0 ||

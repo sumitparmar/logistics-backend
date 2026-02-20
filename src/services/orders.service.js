@@ -4,7 +4,6 @@ const pulseService = require("./pulse.service");
 const { transitionStatus } = require("../engines/status.engine");
 const { mapProviderError } = require("../utils/providerErrorMapper");
 const { mapBorzoStatus } = require("../utils/statusMapper");
-
 const {
   mapCreateOrderPayload,
   mapCalculatePayload,
@@ -13,9 +12,7 @@ const {
 
 const mongoose = require("mongoose");
 
-// ============================
 // CREATE ORDER
-// ============================
 
 const createOrderService = async (data) => {
   const calculatePayload = mapCalculatePayload(data);
@@ -27,6 +24,7 @@ const createOrderService = async (data) => {
 
   const amount = Number(priceResponse.order.payment_amount);
   const createPayload = mapCreateOrderPayload(data);
+
   const createResponse = await pulseService.createOrder(createPayload);
 
   if (!createResponse?.is_successful) {
@@ -112,7 +110,6 @@ const cancelOrderService = async (id, userId) => {
     throw err;
   }
 
-  // 🔒 HARD BUSINESS RULE
   if (["DELIVERED", "CANCELLED", "FAILED"].includes(order.status)) {
     const err = new Error(`Cannot cancel order in ${order.status} state`);
     err.statusCode = 400;
@@ -207,17 +204,12 @@ const syncOrderService = async (id, userId) => {
   return savedOrder;
 };
 
-// ============================
 // CALCULATE PRICE
-// ============================
 
 const calculateOrderService = async (data) => {
   const payload = mapCalculatePayload(data);
 
-  console.log("BORZO CALCULATE PAYLOAD:", JSON.stringify(payload, null, 2));
-
   const response = await pulseService.calculateOrder(payload);
-  console.log("BORZO CALCULATE RAW:", JSON.stringify(response, null, 2));
 
   return {
     amount: Number(response.order.payment_amount),
@@ -225,9 +217,7 @@ const calculateOrderService = async (data) => {
   };
 };
 
-// ============================
 // EDIT ORDER
-// ============================
 
 const editOrderService = async (id, userId, data) => {
   const order = await Order.findOne({ _id: id, user: userId });
@@ -268,9 +258,7 @@ const editOrderService = async (id, userId, data) => {
   return savedOrder;
 };
 
-// ============================
 // PROVIDER ADMIN
-// ============================
 
 const listProviderOrdersService = async (filters = {}) => {
   return pulseService.listProviderOrders(filters);
@@ -280,9 +268,7 @@ const getProviderOrderService = async (orderId) => {
   return pulseService.getProviderOrder(orderId);
 };
 
-// ============================
 // GET COURIER INFO
-// ============================
 
 const getCourierInfoService = async (id, userId) => {
   const order = await Order.findOne({ _id: id, user: userId });
@@ -318,9 +304,7 @@ const getClientProfileService = async () => {
   return response.client;
 };
 
-// ============================
 // GET PROVIDER BANK CARDS
-// ============================
 
 const getBankCardsService = async () => {
   const response = await pulseService.getBankCards();
@@ -334,9 +318,7 @@ const getBankCardsService = async () => {
   return response.bank_cards || [];
 };
 
-// ============================
 // GET PROVIDER LABELS
-// ============================
 
 const getLabelsService = async (filters) => {
   const response = await pulseService.getLabels(filters);
@@ -348,6 +330,190 @@ const getLabelsService = async (filters) => {
   }
 
   return response.labels || [];
+};
+
+const getTrackingService = async (id, userId) => {
+  const order = await Order.findOne({ _id: id, user: userId });
+
+  if (!order) {
+    const err = new Error("Order not found");
+    err.statusCode = 404;
+    throw err;
+  }
+
+  const response = await pulseService.getTracking(order.borzoOrderId);
+
+  if (
+    !response?.is_successful ||
+    !response?.orders ||
+    response.orders.length === 0
+  ) {
+    const err = new Error("Failed to fetch tracking info");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const borzoOrder = response.orders[0];
+
+  return {
+    trackingUrl:
+      borzoOrder.points?.find((p) => p.tracking_url)?.tracking_url || null,
+  };
+};
+
+const getPODService = async (id, userId) => {
+  const order = await Order.findOne({ _id: id, user: userId });
+
+  if (!order) {
+    const err = new Error("Order not found");
+    err.statusCode = 404;
+    throw err;
+  }
+
+  const response = await pulseService.getTracking(order.borzoOrderId);
+
+  if (
+    !response?.is_successful ||
+    !response?.orders ||
+    response.orders.length === 0
+  ) {
+    const err = new Error("Failed to fetch POD");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const borzoOrder = response.orders[0];
+
+  const podPoint = borzoOrder.points?.find(
+    (p) => p.place_photo_url || p.sign_photo_url,
+  );
+
+  return {
+    placePhotoUrl: podPoint?.place_photo_url || null,
+    signPhotoUrl: podPoint?.sign_photo_url || null,
+  };
+};
+
+const getDocumentsService = async (id, userId) => {
+  const order = await Order.findOne({ _id: id, user: userId });
+
+  if (!order) {
+    const err = new Error("Order not found");
+    err.statusCode = 404;
+    throw err;
+  }
+
+  const response = await pulseService.getTracking(order.borzoOrderId);
+
+  if (
+    !response?.is_successful ||
+    !response?.orders ||
+    response.orders.length === 0
+  ) {
+    const err = new Error("Failed to fetch documents");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const borzoOrder = response.orders[0];
+
+  return {
+    waybillUrl: borzoOrder.waybill_document_url || null,
+    itineraryUrl: borzoOrder.itinerary_document_url || null,
+  };
+};
+
+const getPricingBreakdownService = async (id, userId) => {
+  const order = await Order.findOne({ _id: id, user: userId });
+
+  if (!order) {
+    const err = new Error("Order not found");
+    err.statusCode = 404;
+    throw err;
+  }
+
+  const response = await pulseService.getTracking(order.borzoOrderId);
+
+  if (
+    !response?.is_successful ||
+    !response?.orders ||
+    response.orders.length === 0
+  ) {
+    const err = new Error("Failed to fetch pricing breakdown");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const borzoOrder = response.orders[0];
+
+  return {
+    deliveryFeeAmount: borzoOrder.delivery_fee_amount || "0.00",
+    codFeeAmount: borzoOrder.cod_fee_amount || "0.00",
+    waitingFeeAmount: borzoOrder.waiting_fee_amount || "0.00",
+    promoDiscount: borzoOrder.promo_code_discount_amount || "0.00",
+    total: borzoOrder.payment_amount || "0.00",
+  };
+};
+
+const getProviderHistoryService = async (id, userId) => {
+  const order = await Order.findOne({ _id: id, user: userId });
+
+  if (!order) {
+    const err = new Error("Order not found");
+    err.statusCode = 404;
+    throw err;
+  }
+
+  const response = await pulseService.getTracking(order.borzoOrderId);
+
+  if (
+    !response?.is_successful ||
+    !response?.orders ||
+    response.orders.length === 0
+  ) {
+    const err = new Error("Failed to fetch provider history");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const borzoOrder = response.orders[0];
+
+  return {
+    orderId: borzoOrder.order_id,
+    currentStatus: borzoOrder.status,
+    points:
+      borzoOrder.points?.map((p) => ({
+        pointId: p.point_id,
+        deliveryStatus: p.delivery?.status || null,
+      })) || [],
+  };
+};
+
+const createBulkOrdersService = async (orders, userId) => {
+  const results = [];
+
+  for (const payload of orders) {
+    try {
+      const created = await createOrderService({
+        ...payload,
+        user: userId,
+      });
+
+      results.push({
+        success: true,
+        orderId: created._id,
+        borzoOrderId: created.borzoOrderId,
+      });
+    } catch (err) {
+      results.push({
+        success: false,
+        error: err.message,
+        payload,
+      });
+    }
+  }
+
+  return results;
 };
 
 module.exports = {
@@ -364,4 +530,10 @@ module.exports = {
   getClientProfileService,
   getBankCardsService,
   getLabelsService,
+  getTrackingService,
+  getPODService,
+  getDocumentsService,
+  getPricingBreakdownService,
+  getProviderHistoryService,
+  createBulkOrdersService,
 };

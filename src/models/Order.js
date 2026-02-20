@@ -57,6 +57,11 @@ const orderSchema = new mongoose.Schema(
       currency: { type: String, required: true },
     },
 
+    declaredValue: {
+      type: Number,
+      default: null,
+    },
+
     cod: {
       enabled: {
         type: Boolean,
@@ -114,10 +119,16 @@ const orderSchema = new mongoose.Schema(
       type: Object,
       required: true,
     },
+
+    codSettled: {
+      type: Boolean,
+      default: false,
+    },
   },
   { timestamps: true },
 );
 
 orderSchema.index({ borzoOrderId: 1, provider: 1 }, { unique: true });
+orderSchema.index({ user: 1 });
 
 module.exports = mongoose.model("Order", orderSchema);

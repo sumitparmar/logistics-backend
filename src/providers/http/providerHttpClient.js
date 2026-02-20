@@ -1,6 +1,6 @@
 const axios = require("axios");
 
-const DEFAULT_TIMEOUT = 10000; // 10 seconds
+const DEFAULT_TIMEOUT = 10000;
 
 const client = axios.create({
   timeout: DEFAULT_TIMEOUT,
@@ -44,8 +44,6 @@ async function execute(config, retry = true) {
     const response = await client(config);
     return response.data;
   } catch (err) {
-    console.log("PROVIDER RAW ERROR:", err?.response?.data || err.message);
-
     if (retry) {
       return execute(config, false);
     }

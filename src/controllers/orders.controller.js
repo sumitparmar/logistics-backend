@@ -12,14 +12,16 @@ const {
   getClientProfileService,
   getBankCardsService,
   getLabelsService,
+  getTrackingService,
+  getPODService,
+  getDocumentsService,
+  getPricingBreakdownService,
+  getProviderHistoryService,
+  createBulkOrdersService,
 } = require("../services/orders.service");
-
-const pulseService = require("../services/pulse.service");
 const { sendSuccess, sendError } = require("../utils/response");
 
-// ============================
 // CREATE ORDER
-// ============================
 
 const createOrder = async (req, res, next) => {
   try {
@@ -38,9 +40,7 @@ const createOrder = async (req, res, next) => {
   }
 };
 
-// ============================
 // GET ALL ORDERS
-// ============================
 
 const getOrders = async (req, res, next) => {
   try {
@@ -51,9 +51,7 @@ const getOrders = async (req, res, next) => {
   }
 };
 
-// ============================
 // GET ORDER BY ID
-// ============================
 
 const getOrderById = async (req, res, next) => {
   try {
@@ -69,9 +67,7 @@ const getOrderById = async (req, res, next) => {
   }
 };
 
-// ============================
 // CANCEL ORDER
-// ============================
 
 const cancelOrder = async (req, res, next) => {
   try {
@@ -82,9 +78,7 @@ const cancelOrder = async (req, res, next) => {
   }
 };
 
-// ============================
 // SYNC ORDER WITH PROVIDER
-// ============================
 
 const syncOrder = async (req, res, next) => {
   try {
@@ -100,9 +94,7 @@ const syncOrder = async (req, res, next) => {
   }
 };
 
-// ============================
-// CALCULATE PRICE  ✅ FIXED
-// ============================
+// CALCULATE PRICE
 
 const calculateOrder = async (req, res, next) => {
   try {
@@ -117,9 +109,7 @@ const calculateOrder = async (req, res, next) => {
   }
 };
 
-// ============================
 // EDIT ORDER
-// ============================
 
 const editOrder = async (req, res, next) => {
   try {
@@ -130,9 +120,7 @@ const editOrder = async (req, res, next) => {
   }
 };
 
-// ============================
 // LIST PROVIDER ORDERS
-// ============================
 
 const listProviderOrders = async (req, res, next) => {
   try {
@@ -143,9 +131,7 @@ const listProviderOrders = async (req, res, next) => {
   }
 };
 
-// ============================
 // GET PROVIDER ORDER
-// ============================
 
 const getProviderOrder = async (req, res, next) => {
   try {
@@ -184,9 +170,7 @@ const getClientProfile = async (req, res, next) => {
   }
 };
 
-// ============================
 // GET PROVIDER BANK CARDS
-// ============================
 
 const getBankCards = async (req, res, next) => {
   try {
@@ -208,8 +192,65 @@ const getLabels = async (req, res, next) => {
   }
 };
 
-// EXPORTS
+const getTracking = async (req, res, next) => {
+  try {
+    const data = await getTrackingService(req.params.id, req.user._id);
+    return sendSuccess(res, data, "Tracking URL fetched");
+  } catch (error) {
+    next(error);
+  }
+};
 
+const getPOD = async (req, res, next) => {
+  try {
+    const data = await getPODService(req.params.id, req.user._id);
+    return sendSuccess(res, data, "POD fetched");
+  } catch (error) {
+    next(error);
+  }
+};
+
+const getDocuments = async (req, res, next) => {
+  try {
+    const data = await getDocumentsService(req.params.id, req.user._id);
+    return sendSuccess(res, data, "Documents fetched");
+  } catch (error) {
+    next(error);
+  }
+};
+
+const getPricingBreakdown = async (req, res, next) => {
+  try {
+    const data = await getPricingBreakdownService(req.params.id, req.user._id);
+    return sendSuccess(res, data, "Pricing breakdown fetched");
+  } catch (error) {
+    next(error);
+  }
+};
+
+const getProviderHistory = async (req, res, next) => {
+  try {
+    const data = await getProviderHistoryService(req.params.id, req.user._id);
+    return sendSuccess(res, data, "Provider history fetched");
+  } catch (error) {
+    next(error);
+  }
+};
+
+const createBulkOrders = async (req, res, next) => {
+  try {
+    const results = await createBulkOrdersService(
+      req.body.orders,
+      req.user._id,
+    );
+
+    return sendSuccess(res, results, "Bulk orders processed");
+  } catch (err) {
+    next(err);
+  }
+};
+
+// EXPORTS
 module.exports = {
   createOrder,
   getOrders,
@@ -224,4 +265,10 @@ module.exports = {
   getClientProfile,
   getBankCards,
   getLabels,
+  getTracking,
+  getPOD,
+  getDocuments,
+  getPricingBreakdown,
+  getProviderHistory,
+  createBulkOrders,
 };

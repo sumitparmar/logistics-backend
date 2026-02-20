@@ -35,9 +35,8 @@ function transitionStatus(currentStatus, nextStatus) {
     return currentStatus;
   }
 
-  // backward webhook → ignore silently
+  // backward webhook  ignore silently
   if (nextIndex < currentIndex) {
-    console.log(`Ignoring backward status ${currentStatus} → ${nextStatus}`);
     return currentStatus;
   }
 

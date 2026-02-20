@@ -7,7 +7,6 @@ class ProviderRouter {
 
     for (const name of providers) {
       if (healthStore.isUp(name)) {
-        console.log("USING PROVIDER:", name);
         return getProvider(name);
       }
     }

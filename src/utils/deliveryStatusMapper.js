@@ -4,8 +4,8 @@ const mapDeliveryStatus = (status) => {
 
     courier_assigned: "ASSIGNED",
 
-    picked_up: "PICKED_UP", // ✅ ADD THIS
-    parcel_picked_up: "PICKED_UP", // keep
+    picked_up: "PICKED_UP",
+    parcel_picked_up: "PICKED_UP",
 
     delivering: "IN_TRANSIT",
     active: "IN_TRANSIT",

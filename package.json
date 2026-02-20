@@ -33,6 +33,7 @@
     "mongoose": "^9.2.1",
     "node-cron": "^4.2.1",
     "opossum": "^9.0.0",
+    "razorpay": "^2.9.6",
     "socket.io": "^4.8.3",
     "uuid": "^13.0.0",
     "winston": "^3.19.0",

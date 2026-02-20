@@ -12,5 +12,4 @@ await User.create({
   role: "ADMIN",
 });
 
-console.log("ADMIN CREATED");
 process.exit();

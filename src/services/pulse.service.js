@@ -144,6 +144,19 @@ class PulseService {
       throw err;
     }
   }
+
+  async getTracking(orderId) {
+    try {
+      return await providerRouter.getOrder(orderId);
+    } catch (err) {
+      await pushToDLQ({
+        type: "GET_TRACKING",
+        payload: { orderId },
+        error: err.message,
+      });
+      throw err;
+    }
+  }
 }
 
 module.exports = new PulseService();

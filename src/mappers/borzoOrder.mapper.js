@@ -57,6 +57,7 @@ const mapCreateOrderPayload = (data) => {
   return {
     matter: data.matter,
     vehicle_type_id: data.vehicleTypeId || 8,
+
     points: [pickupPoint, dropPoint],
   };
 };

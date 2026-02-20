@@ -6,7 +6,7 @@ const adminRoutes = require("./routes/admin.routes");
 const protect = require("./middlewares/auth.middleware");
 
 const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
+  windowMs: 15 * 60 * 1000,
   max: 300, // requests per IP
   standardHeaders: true,
   legacyHeaders: false,
@@ -23,6 +23,7 @@ const cors = require("cors");
 // const mongoSanitize = require("express-mongo-sanitize");
 const vehiclesRoutes = require("./routes/vehicles.routes");
 const paymentsRoutes = require("./routes/payments.routes");
+const paymentWebhookRoutes = require("./routes/paymentWebhooks.routes");
 
 const app = express(); // FIRST create app
 
@@ -56,6 +57,7 @@ app.use("/api/vehicles", vehiclesRoutes);
 app.use("/api/payments", paymentsRoutes);
 app.use("/api/reconciliation", reconciliationRoutes);
 app.use("/api/admin", protect, adminRoutes);
+app.use("/api/payment-webhooks", paymentWebhookRoutes);
 
 // Health
 app.get("/", (req, res) => {

@@ -1,14 +1,11 @@
 const healthStore = require("./providerHealth");
 const { getProvider, listProviders } = require("./registry");
 
-const CHECK_INTERVAL_MS = 60 * 1000; // 1 minute
+const CHECK_INTERVAL_MS = 60 * 1000;
 
-/**
- * Pings a single provider and updates health store
- */
+//  Pings a single provider and updates health store
+
 async function pingProvider(providerName) {
-  console.log("Pinging provider:", providerName);
-
   try {
     const provider = getProvider(providerName);
 
@@ -19,21 +16,14 @@ async function pingProvider(providerName) {
     await provider.healthCheck();
 
     healthStore.markUp(providerName);
-    console.log(`PROVIDER UP: ${providerName}`);
   } catch (err) {
-    console.log("PING ERROR:", err?.response?.data || err?.message || err);
-
     healthStore.markDown(providerName);
-    console.log(`PROVIDER DOWN: ${providerName}`);
   }
 }
 
-/**
- * Starts background health monitoring
- */
-async function startProviderHealthJob() {
-  console.log("Provider health recovery job started");
+//  Starts background health monitoring
 
+async function startProviderHealthJob() {
   // Run once immediately on startup
   const providers = listProviders();
 

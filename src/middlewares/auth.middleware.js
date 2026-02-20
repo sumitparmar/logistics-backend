@@ -31,7 +31,6 @@ const protect = async (req, res, next) => {
     }
 
     req.user = user;
-    console.log("AUTH USER:", user.email, user.role);
 
     next();
   } catch (error) {

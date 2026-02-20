@@ -9,9 +9,7 @@ const logAction = async ({ user, action, req, meta = {} }) => {
       userAgent: req.headers["user-agent"],
       meta,
     });
-  } catch (err) {
-    console.log("AUDIT LOG ERROR:", err.message);
-  }
+  } catch (err) {}
 };
 
 module.exports = { logAction };

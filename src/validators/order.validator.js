@@ -20,6 +20,7 @@ const calculateOrderSchema = Joi.object({
  */
 const createOrderSchema = Joi.object({
   matter: Joi.string().required(),
+  declaredValue: Joi.number().min(0).optional(),
 
   customer: Joi.object({
     name: Joi.string().optional(),

@@ -1,8 +1,28 @@
 const express = require("express");
 const router = express.Router();
 const protect = require("../middlewares/auth.middleware");
-const { getPaymentMethods } = require("../controllers/payments.controller");
 
+const {
+  getPaymentMethods,
+  payIn,
+  payOut,
+  getWalletBalance,
+  getLedger,
+  createPaymentIntentAndGatewayOrder,
+  refundPayment,
+} = require("../controllers/payments.controller");
+
+// STATIC
 router.get("/", protect, getPaymentMethods);
+
+// WALLET
+router.get("/wallet", protect, getWalletBalance);
+router.get("/ledger", protect, getLedger);
+
+// TRANSACTIONS
+router.post("/payin", protect, payIn);
+router.post("/payout", protect, payOut);
+router.post("/intent", protect, createPaymentIntentAndGatewayOrder);
+router.post("/refund", protect, refundPayment);
 
 module.exports = router;

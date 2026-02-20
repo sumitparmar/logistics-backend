@@ -13,8 +13,6 @@ const SYSTEM_USER_ID = "69956c36c343049730f6ef45";
       { $set: { user: SYSTEM_USER_ID } },
     );
 
-    console.log("Orders updated:", result.modifiedCount);
-
     process.exit();
   } catch (err) {
     console.error(err);
