@@ -131,6 +131,19 @@ class PulseService {
       throw err;
     }
   }
+
+  async getLabels(params) {
+    try {
+      return await providerRouter.getLabels(params);
+    } catch (err) {
+      await pushToDLQ({
+        type: "GET_LABELS",
+        payload: params,
+        error: err.message,
+      });
+      throw err;
+    }
+  }
 }
 
 module.exports = new PulseService();

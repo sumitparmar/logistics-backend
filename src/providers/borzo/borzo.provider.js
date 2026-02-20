@@ -60,6 +60,10 @@ class BorzoProvider extends LogisticsProvider {
   async getBankCards() {
     return client.get("/bank-cards");
   }
+
+  async getLabels(params) {
+    return client.get("/labels", { params });
+  }
 }
 
 module.exports = BorzoProvider;

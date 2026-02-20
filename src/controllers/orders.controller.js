@@ -11,6 +11,7 @@ const {
   getCourierInfoService,
   getClientProfileService,
   getBankCardsService,
+  getLabelsService,
 } = require("../services/orders.service");
 
 const pulseService = require("../services/pulse.service");
@@ -196,6 +197,17 @@ const getBankCards = async (req, res, next) => {
   }
 };
 
+// GET PROVIDER LABELS
+
+const getLabels = async (req, res, next) => {
+  try {
+    const labels = await getLabelsService(req.query);
+    return sendSuccess(res, labels, "Labels fetched");
+  } catch (error) {
+    next(error);
+  }
+};
+
 // EXPORTS
 
 module.exports = {
@@ -211,4 +223,5 @@ module.exports = {
   getCourierInfo,
   getClientProfile,
   getBankCards,
+  getLabels,
 };

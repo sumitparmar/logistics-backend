@@ -37,6 +37,10 @@ const createOrderSchema = Joi.object({
     lat: Joi.number().optional(),
     lng: Joi.number().optional(),
   }).required(),
+
+  cod: Joi.object({
+    amount: Joi.number().positive().required(),
+  }).optional(),
 });
 
 module.exports = {

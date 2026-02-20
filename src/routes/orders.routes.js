@@ -22,6 +22,7 @@ const {
   getCourierInfo,
   getClientProfile,
   getBankCards,
+  getLabels,
 } = require("../controllers/orders.controller");
 
 // CREATE
@@ -70,6 +71,8 @@ router.get(
 );
 
 router.get("/provider/bank-cards", protect, allowRoles("Admin"), getBankCards);
+
+router.get("/provider/labels", protect, allowRoles("Admin"), getLabels);
 
 router.get(
   "/provider/:orderId",

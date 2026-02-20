@@ -59,6 +59,11 @@ class ProviderRouter {
     const provider = this.getAvailableProvider();
     return provider.getBankCards();
   }
+
+  async getLabels(params) {
+    const provider = this.getAvailableProvider();
+    return provider.getLabels(params);
+  }
 }
 
 module.exports = new ProviderRouter();

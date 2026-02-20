@@ -28,30 +28,36 @@ const mapCreateOrderPayload = (data) => {
     throw new Error("pickup.address and drop.address are required");
   }
 
+  const pickupPoint = {
+    address: data.pickup.address,
+    latitude: data.pickup.lat || null,
+    longitude: data.pickup.lng || null,
+    contact_person: {
+      name: data.customer.name || null,
+      phone: data.customer.phone,
+    },
+  };
+
+  const dropPoint = {
+    address: data.drop.address,
+    latitude: data.drop.lat || null,
+    longitude: data.drop.lng || null,
+    contact_person: {
+      name: data.customer.name || null,
+      phone: data.customer.phone,
+    },
+  };
+
+  //  COD Injection
+  if (data.cod?.amount) {
+    dropPoint.is_cod_cash_voucher_required = true;
+    dropPoint.taking_amount = Number(data.cod.amount);
+  }
+
   return {
     matter: data.matter,
     vehicle_type_id: data.vehicleTypeId || 8,
-
-    points: [
-      {
-        address: data.pickup.address,
-        latitude: data.pickup.lat || null,
-        longitude: data.pickup.lng || null,
-        contact_person: {
-          name: data.customer.name || null,
-          phone: data.customer.phone,
-        },
-      },
-      {
-        address: data.drop.address,
-        latitude: data.drop.lat || null,
-        longitude: data.drop.lng || null,
-        contact_person: {
-          name: data.customer.name || null,
-          phone: data.customer.phone,
-        },
-      },
-    ],
+    points: [pickupPoint, dropPoint],
   };
 };
 

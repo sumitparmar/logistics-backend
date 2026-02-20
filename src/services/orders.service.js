@@ -18,17 +18,16 @@ const mongoose = require("mongoose");
 // ============================
 
 const createOrderService = async (data) => {
-  const payload = mapCreateOrderPayload(data);
-
-  const priceResponse = await pulseService.calculateOrder(payload);
+  const calculatePayload = mapCalculatePayload(data);
+  const priceResponse = await pulseService.calculateOrder(calculatePayload);
 
   if (!priceResponse?.order?.payment_amount) {
     throw new Error("Price calculation failed");
   }
 
   const amount = Number(priceResponse.order.payment_amount);
-
-  const createResponse = await pulseService.createOrder(payload);
+  const createPayload = mapCreateOrderPayload(data);
+  const createResponse = await pulseService.createOrder(createPayload);
 
   if (!createResponse?.is_successful) {
     const mapped = mapProviderError(createResponse);
@@ -61,8 +60,12 @@ const createOrderService = async (data) => {
       currency: process.env.CURRENCY,
     },
 
-    status: transitionStatus(null, mappedStatus),
+    cod: {
+      enabled: Boolean(data.cod?.amount),
+      amount: data.cod?.amount ? Number(data.cod.amount) : 0,
+    },
 
+    status: transitionStatus(null, mappedStatus),
     statusHistory: [{ status: transitionStatus(null, mappedStatus) }],
 
     provider: "BORZO",
@@ -331,6 +334,22 @@ const getBankCardsService = async () => {
   return response.bank_cards || [];
 };
 
+// ============================
+// GET PROVIDER LABELS
+// ============================
+
+const getLabelsService = async (filters) => {
+  const response = await pulseService.getLabels(filters);
+
+  if (!response?.is_successful) {
+    const err = new Error("Failed to fetch labels");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  return response.labels || [];
+};
+
 module.exports = {
   createOrderService,
   getOrdersService,
@@ -344,4 +363,5 @@ module.exports = {
   getCourierInfoService,
   getClientProfileService,
   getBankCardsService,
+  getLabelsService,
 };
