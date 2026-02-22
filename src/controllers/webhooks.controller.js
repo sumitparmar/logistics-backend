@@ -21,10 +21,9 @@ const borzoWebhook = async (req, res) => {
     }
     // Idempotency (prevent duplicates)
     const fingerprint = webhookFingerprint({
-      type: "order",
-      order_id: payload?.order?.order_id,
-      status:
-        payload?.order?.status || payload?.order?.points?.[0]?.delivery?.status,
+      type: "delivery",
+      order_id: payload?.delivery?.order_id,
+      status: payload?.delivery?.status,
     });
 
     try {

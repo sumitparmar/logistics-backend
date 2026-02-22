@@ -1,8 +1,14 @@
-const vehicleTypes = require("../constants/vehicleTypes");
+const { getVehicleTypes } = require("../services/providerCatalog.service");
 const { sendSuccess } = require("../utils/response");
 
-const getVehicleTypes = async (req, res) => {
-  return sendSuccess(res, vehicleTypes, "Vehicle types fetched");
+const getVehicles = async (req, res, next) => {
+  try {
+    const vehicles = await getVehicleTypes(req.query);
+
+    return sendSuccess(res, vehicles, "Vehicle types fetched");
+  } catch (err) {
+    next(err);
+  }
 };
 
-module.exports = { getVehicleTypes };
+module.exports = { getVehicles };

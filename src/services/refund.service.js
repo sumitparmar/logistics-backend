@@ -21,30 +21,31 @@ const requestRefund = async ({ intentId, reason }) => {
   return intent;
 };
 
-const completeRefund = async ({ gatewayOrderId, gatewayPaymentId }) => {
+const completeRefund = async ({ gatewayOrderId }) => {
   const intent = await PaymentIntent.findOne({
     gatewayOrderId,
-    gatewayPaymentId,
+    status: { $in: ["REFUND_REQUESTED", "REFUND_PROCESSING"] },
   });
 
   if (!intent) return null;
 
+  // Mark processing
   intent.status = "REFUND_PROCESSING";
   intent.statusHistory.push({ status: "REFUND_PROCESSING" });
-
   await intent.save();
 
-  // Debit wallet
+  // Debit wallet (only once)
   await debitWallet({
     userId: intent.user,
     amount: intent.amount,
-    reason: "REFUND",
+    reason: "PAYMENT_REFUND",
     reference: intent._id.toString(),
+    metadata: { gateway: intent.gateway },
   });
 
+  // Mark refunded
   intent.status = "REFUNDED";
   intent.statusHistory.push({ status: "REFUNDED" });
-
   await intent.save();
 
   return intent;

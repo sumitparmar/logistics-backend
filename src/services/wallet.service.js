@@ -8,7 +8,11 @@ const getWallet = async (userId) => {
   let wallet = await Wallet.findOne({ user: userId });
 
   if (!wallet) {
-    wallet = await Wallet.create({ user: userId });
+    wallet = await Wallet.create({
+      user: userId,
+      balance: 0,
+      currency: "INR",
+    });
   }
 
   return wallet;
@@ -26,8 +30,12 @@ const creditWallet = async ({
 }) => {
   const wallet = await getWallet(userId);
 
-  wallet.balance += Number(amount);
-  await wallet.save();
+  const newBalance = wallet.balance + Number(amount);
+
+  await Wallet.updateOne(
+    { _id: wallet._id },
+    { $set: { balance: newBalance } },
+  );
 
   await LedgerEntry.create({
     wallet: wallet._id,
@@ -38,7 +46,7 @@ const creditWallet = async ({
     metadata,
   });
 
-  return wallet;
+  return await Wallet.findById(wallet._id);
 };
 
 /**
@@ -51,8 +59,12 @@ const debitWallet = async ({ userId, amount, reason, reference, metadata }) => {
     throw new Error("Insufficient wallet balance");
   }
 
-  wallet.balance -= Number(amount);
-  await wallet.save();
+  const newBalance = wallet.balance - Number(amount);
+
+  await Wallet.updateOne(
+    { _id: wallet._id },
+    { $set: { balance: newBalance } },
+  );
 
   await LedgerEntry.create({
     wallet: wallet._id,
@@ -63,7 +75,7 @@ const debitWallet = async ({ userId, amount, reason, reference, metadata }) => {
     metadata,
   });
 
-  return wallet;
+  return await Wallet.findById(wallet._id);
 };
 
 module.exports = {

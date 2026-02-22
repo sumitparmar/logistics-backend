@@ -6,7 +6,6 @@ const startProviderHealthJob = require("./providers/providerHealth.job");
 const startOrderSyncJob = require("./jobs/orderSync.job");
 const connectDB = require("./config/db");
 const app = require("./app");
-
 const PORT = process.env.PORT || 5000;
 
 //  DATABASE
@@ -15,7 +14,6 @@ connectDB();
 startReconciliationJob();
 startProviderHealthJob();
 startOrderSyncJob();
-
 //  START SERVER
 
 const http = require("http");

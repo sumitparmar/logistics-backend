@@ -3,7 +3,7 @@ const Order = require("../models/Order");
 const pulseService = require("../services/pulse.service");
 const { transitionStatus } = require("../engines/status.engine");
 const { mapBorzoStatus } = require("../utils/statusMapper");
-
+const { getIO } = require("../config/socket");
 const startOrderSyncJob = () => {
   cron.schedule("*/2 * * * *", async () => {
     try {
@@ -12,6 +12,8 @@ const startOrderSyncJob = () => {
       }).limit(50);
 
       for (const order of orders) {
+        console.log("CRON SYNC CHECK:", order._id, order.status);
+
         const response = await pulseService.getOrder(order.borzoOrderId);
 
         if (
@@ -36,7 +38,14 @@ const startOrderSyncJob = () => {
         if (nextStatus !== order.status) {
           order.status = nextStatus;
           order.statusHistory.push({ status: nextStatus });
-          await order.save();
+
+          const savedOrder = await order.save();
+
+          const io = getIO();
+          io.to(`user:${savedOrder.user}`).emit("order-status-update", {
+            orderId: savedOrder._id,
+            status: savedOrder.status,
+          });
         }
       }
     } catch (err) {

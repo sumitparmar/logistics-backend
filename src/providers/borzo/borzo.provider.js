@@ -1,11 +1,6 @@
 const LogisticsProvider = require("../interfaces/logisticsProvider.interface");
 const client = require("./borzo.http");
 
-/**
- * BorzoProvider
- * Receives payload already in Borzo format
- * Does NOT transform payload
- */
 class BorzoProvider extends LogisticsProvider {
   async calculatePrice(payload) {
     return client.post("/calculate-order", payload);
@@ -63,6 +58,10 @@ class BorzoProvider extends LogisticsProvider {
 
   async getLabels(params) {
     return client.get("/labels", { params });
+  }
+
+  async getVehicleTypes(params = {}) {
+    return client.get("/vehicles", { params });
   }
 }
 

@@ -22,7 +22,7 @@ function markDown(name) {
  * Check if provider is UP
  */
 function isUp(name) {
-  return healthMap[name] === true;
+  return healthMap[name] !== false;
 }
 
 /**

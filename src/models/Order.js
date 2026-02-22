@@ -31,6 +31,13 @@ const orderSchema = new mongoose.Schema(
       lng: Number,
     },
 
+    vehicle: {
+      type: {
+        type: String,
+        index: true,
+      },
+    },
+
     courier: {
       courierId: Number,
       name: String,

@@ -9,12 +9,25 @@ const {
   mapCalculatePayload,
   mapEditPayload,
 } = require("../mappers/borzoOrder.mapper");
-
+const { getVehicleTypes } = require("./providerCatalog.service");
 const mongoose = require("mongoose");
 
 // CREATE ORDER
 
 const createOrderService = async (data) => {
+  const vehicles = await getVehicleTypes();
+
+  const validVehicle = vehicles.find(
+    (v) => String(v.id) === String(data.vehicleTypeId),
+  );
+
+  if (!validVehicle) {
+    const err = new Error("Invalid vehicle type");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  data.vehicleTypeId = data.vehicleTypeId || data.vehicleType;
   const calculatePayload = mapCalculatePayload(data);
   const priceResponse = await pulseService.calculateOrder(calculatePayload);
 
@@ -23,7 +36,16 @@ const createOrderService = async (data) => {
   }
 
   const amount = Number(priceResponse.order.payment_amount);
-  const createPayload = mapCreateOrderPayload(data);
+  let createPayload;
+
+  // END-OF-DAY FLOW
+  if (data.orderType === "END_OF_DAY") {
+    createPayload = {
+      order_id: priceResponse.order.order_id,
+    };
+  } else {
+    createPayload = mapCreateOrderPayload(data);
+  }
 
   const createResponse = await pulseService.createOrder(createPayload);
 
@@ -42,6 +64,8 @@ const createOrderService = async (data) => {
   }
 
   const providerStatus = createResponse.order.status;
+  const vehicleTypeFromProvider =
+    createResponse.order.vehicle_type_id || validVehicle.id;
   const mappedStatus = mapBorzoStatus(providerStatus);
 
   const order = new Order({
@@ -52,6 +76,10 @@ const createOrderService = async (data) => {
     customer: data.customer,
     pickup: data.pickup,
     drop: data.drop,
+
+    vehicle: {
+      type: vehicleTypeFromProvider,
+    },
 
     pricing: {
       amount,
@@ -67,6 +95,7 @@ const createOrderService = async (data) => {
     statusHistory: [{ status: transitionStatus(null, mappedStatus) }],
 
     provider: "BORZO",
+
     rawProviderResponse: createResponse,
   });
 
@@ -158,8 +187,7 @@ const cancelOrderService = async (id, userId) => {
 // SYNC ORDER
 
 const syncOrderService = async (id, userId) => {
-  const order = await Order.findOne({ _id: id, user: userId });
-
+  const order = await Order.findById(id);
   if (!order) throw new Error("Order not found");
   const response = await pulseService.getOrder(order.borzoOrderId);
 
@@ -172,8 +200,8 @@ const syncOrderService = async (id, userId) => {
   }
 
   const borzoOrder = response.orders[0];
-
-  const courierData = borzoOrder.courier;
+  const backpaymentAmount = Number(borzoOrder.backpayment_amount || 0);
+  const codFeeAmount = Number(borzoOrder.cod_fee_amount || 0);
 
   const borzoStatus = borzoOrder.status;
 
@@ -183,6 +211,15 @@ const syncOrderService = async (id, userId) => {
   const mappedStatus = mapBorzoStatus(deliveryStatus || borzoStatus);
 
   order.status = transitionStatus(order.status, mappedStatus);
+  // ===== COD Settlement Update =====
+  if (order.cod?.enabled) {
+    order.cod.collectedAmount = backpaymentAmount;
+    order.cod.codFee = codFeeAmount;
+
+    if (mappedStatus === "DELIVERED" && backpaymentAmount > 0) {
+      order.codSettled = true;
+    }
+  }
 
   if (
     order.statusHistory.length === 0 ||
@@ -226,6 +263,7 @@ const editOrderService = async (id, userId, data) => {
 
   const payload = mapEditPayload(order.borzoOrderId, data);
 
+  // chatgpt change
   const response = await pulseService.editOrder(payload);
 
   if (!response?.is_successful) {
@@ -238,12 +276,12 @@ const editOrderService = async (id, userId, data) => {
     throw err;
   }
 
-  if (
-    order.statusHistory.length === 0 ||
-    order.statusHistory[order.statusHistory.length - 1].status !== "UPDATED"
-  ) {
-    order.statusHistory.push({ status: "UPDATED" });
-  }
+  // if (
+  //   order.statusHistory.length === 0 ||
+  //   order.statusHistory[order.statusHistory.length - 1].status !== "UPDATED"
+  // ) {
+  //   order.statusHistory.push({ status: "UPDATED" });
+  // }
 
   order.rawProviderResponse = response;
 
@@ -287,7 +325,7 @@ const getCourierInfoService = async (id, userId) => {
     throw err;
   }
 
-  return response.courier || null;
+  return response?.courier || null;
 };
 
 // GET PROVIDER CLIENT PROFILE

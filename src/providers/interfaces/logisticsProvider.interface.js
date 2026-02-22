@@ -18,6 +18,10 @@ class LogisticsProvider {
   async healthCheck() {
     throw new Error("healthCheck() not implemented");
   }
+
+  async getVehicleTypes() {
+    throw new Error("getVehicleTypes() not implemented");
+  }
 }
 
 module.exports = LogisticsProvider;

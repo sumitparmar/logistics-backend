@@ -5,21 +5,23 @@ const paymentSuccessWebhook = async (req, res) => {
   try {
     const { gatewayOrderId, gatewayPaymentId } = req.body;
 
-    const intent = await PaymentIntent.findOne({ gatewayOrderId });
+    const intent = await PaymentIntent.findOneAndUpdate(
+      { gatewayOrderId },
+      {
+        $set: {
+          status: "SUCCESS",
+          gatewayPaymentId,
+        },
+        $push: { statusHistory: { status: "SUCCESS" } },
+      },
+      { new: true },
+    );
+    console.log("WEBHOOK INTENT FOUND:", intent);
 
+    // Already processed OR not found
     if (!intent) {
-      return res.status(404).json({ received: false });
-    }
-
-    if (intent.status === "SUCCESS") {
       return res.json({ received: true });
     }
-
-    intent.status = "SUCCESS";
-    intent.gatewayPaymentId = gatewayPaymentId;
-    intent.statusHistory.push({ status: "SUCCESS" });
-
-    await intent.save();
 
     // Auto wallet credit
     await creditWallet({

@@ -119,8 +119,8 @@ const createPaymentIntentAndGatewayOrder = async (req, res, next) => {
       {
         intentId: intent._id,
         gatewayOrderId: gatewayOrder.id,
-        amount: gatewayOrder.amount,
-        currency: gatewayOrder.currency,
+        amount: intent.amount,
+        currency: intent.currency,
         key: process.env.RAZORPAY_KEY_ID,
       },
       "Payment intent created",

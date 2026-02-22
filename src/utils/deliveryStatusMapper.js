@@ -17,7 +17,7 @@ const mapDeliveryStatus = (status) => {
     cancelled: "CANCELLED",
   };
 
-  return map[status] || null;
+  return map[String(status).toLowerCase()] || null;
 };
 
 module.exports = mapDeliveryStatus;

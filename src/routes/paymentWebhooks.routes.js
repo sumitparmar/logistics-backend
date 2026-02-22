@@ -17,11 +17,10 @@ router.post("/success", paymentSuccessWebhook);
  */
 router.post("/refund-success", async (req, res) => {
   try {
-    const { gatewayOrderId, gatewayPaymentId } = req.body;
+    const { gatewayOrderId } = req.body;
 
     await completeRefund({
       gatewayOrderId,
-      gatewayPaymentId,
     });
 
     return res.json({ received: true });

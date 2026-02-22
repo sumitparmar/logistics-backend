@@ -1,8 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const protect = require("../middlewares/auth.middleware");
-const { getVehicleTypes } = require("../controllers/vehicles.controller");
+const { getVehicles } = require("../controllers/vehicles.controller");
 
-router.get("/", protect, getVehicleTypes);
-
+router.get("/", protect, getVehicles);
 module.exports = router;

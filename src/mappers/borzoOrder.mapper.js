@@ -7,12 +7,19 @@ const mapCalculatePayload = (data) => {
     throw new Error("pickup.address and drop.address are required");
   }
 
-  return {
+  const payload = {
     matter: data.matter,
     vehicle_type_id: data.vehicleTypeId || 8,
 
     points: [{ address: data.pickup.address }, { address: data.drop.address }],
   };
+
+  // End-of-day order
+  if (data.orderType === "END_OF_DAY") {
+    payload.type = "endofday";
+  }
+
+  return payload;
 };
 
 const mapCreateOrderPayload = (data) => {
@@ -54,12 +61,19 @@ const mapCreateOrderPayload = (data) => {
     dropPoint.taking_amount = Number(data.cod.amount);
   }
 
-  return {
+  const payload = {
     matter: data.matter,
     vehicle_type_id: data.vehicleTypeId || 8,
 
     points: [pickupPoint, dropPoint],
   };
+
+  // End-of-day order
+  if (data.orderType === "END_OF_DAY") {
+    payload.type = "endofday";
+  }
+
+  return payload;
 };
 
 const mapEditPayload = (borzoOrderId, data) => {

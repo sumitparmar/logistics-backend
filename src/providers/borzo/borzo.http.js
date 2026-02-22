@@ -24,7 +24,7 @@ axiosRetry(axiosClient, {
     error.response?.status >= 500,
 });
 
-/* ---------------- CIRCUIT BREAKER ---------------- */
+// CIRCUIT BREAKER
 
 const breakerOptions = {
   timeout: 20000,
@@ -41,7 +41,7 @@ breaker.on("open", () => logger.error("BORZO CIRCUIT OPEN"));
 breaker.on("halfOpen", () => logger.warn("BORZO CIRCUIT HALF-OPEN"));
 breaker.on("close", () => logger.info("BORZO CIRCUIT CLOSED"));
 
-/* ---------------- REQUEST WRAPPER ---------------- */
+// REQUEST WRAPPER
 
 const client = async (config) => {
   logger.info("BORZO REQUEST", {
@@ -68,8 +68,7 @@ const client = async (config) => {
     throw error;
   }
 };
-
-/* ---------------- HTTP METHODS ---------------- */
+//  HTTP METHODS
 
 client.get = (url, options = {}) => client({ method: "get", url, ...options });
 

@@ -9,7 +9,7 @@ class PulseService {
       await pushToDLQ({
         type: "CALCULATE_ORDER",
         payload,
-        error: err.message,
+        error: err?.response?.data || err.message,
       });
       throw err;
     }
@@ -22,7 +22,7 @@ class PulseService {
       await pushToDLQ({
         type: "CREATE_ORDER",
         payload,
-        error: err.message,
+        error: err?.response?.data || err.message,
       });
       throw err;
     }
@@ -35,7 +35,7 @@ class PulseService {
       await pushToDLQ({
         type: "CANCEL_ORDER",
         payload,
-        error: err.message,
+        error: err?.response?.data || err.message,
       });
       throw err;
     }
@@ -48,7 +48,7 @@ class PulseService {
       await pushToDLQ({
         type: "GET_ORDER",
         payload: { orderId },
-        error: err.message,
+        error: err?.response?.data || err.message,
       });
       throw err;
     }
@@ -61,7 +61,7 @@ class PulseService {
       await pushToDLQ({
         type: "EDIT_ORDER",
         payload,
-        error: err.message,
+        error: err?.response?.data || err.message,
       });
       throw err;
     }
@@ -74,7 +74,7 @@ class PulseService {
       await pushToDLQ({
         type: "LIST_ORDERS",
         payload: filters,
-        error: err.message,
+        error: err?.response?.data || err.message,
       });
       throw err;
     }
@@ -87,7 +87,7 @@ class PulseService {
       await pushToDLQ({
         type: "GET_PROVIDER_ORDER",
         payload: { orderId },
-        error: err.message,
+        error: err?.response?.data || err.message,
       });
       throw err;
     }
@@ -100,7 +100,7 @@ class PulseService {
       await pushToDLQ({
         type: "GET_COURIER_INFO",
         payload: { orderId },
-        error: err.message,
+        error: err?.response?.data || err.message,
       });
       throw err;
     }
@@ -113,7 +113,7 @@ class PulseService {
       await pushToDLQ({
         type: "GET_CLIENT_PROFILE",
         payload: {},
-        error: err.message,
+        error: err?.response?.data || err.message,
       });
       throw err;
     }
@@ -126,7 +126,7 @@ class PulseService {
       await pushToDLQ({
         type: "GET_BANK_CARDS",
         payload: {},
-        error: err.message,
+        error: err?.response?.data || err.message,
       });
       throw err;
     }
@@ -139,7 +139,7 @@ class PulseService {
       await pushToDLQ({
         type: "GET_LABELS",
         payload: params,
-        error: err.message,
+        error: err?.response?.data || err.message,
       });
       throw err;
     }
@@ -152,7 +152,7 @@ class PulseService {
       await pushToDLQ({
         type: "GET_TRACKING",
         payload: { orderId },
-        error: err.message,
+        error: err?.response?.data || err.message,
       });
       throw err;
     }
