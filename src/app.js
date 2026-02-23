@@ -24,7 +24,7 @@ const paymentWebhookRoutes = require("./routes/paymentWebhooks.routes");
 const providerCatalogRoutes = require("./routes/providerCatalog.routes");
 const app = express(); // FIRST create app
 const analyticsRoutes = require("./routes/analytics.routes");
-
+const invoiceRoutes = require("./routes/invoice.routes");
 // MUST BE FIRST
 app.set("trust proxy", 1);
 
@@ -55,6 +55,8 @@ app.use("/api/payments", paymentsRoutes);
 app.use("/api/reconciliation", reconciliationRoutes);
 app.use("/api/admin", protect, adminRoutes);
 app.use("/api/payment-webhooks", paymentWebhookRoutes);
+app.use("/api/invoices", invoiceRoutes);
+
 // Health
 app.get("/", (req, res) => {
   res.json({ status: "Backend running" });
