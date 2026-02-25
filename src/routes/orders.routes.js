@@ -53,12 +53,7 @@ router.post("/:id/cancel", protect, cancelOrder);
 
 router.get("/:id/sync", protect, allowRoles("Admin"), syncOrder);
 
-router.post(
-  "/calculate",
-  protect,
-  validate(calculateOrderSchema),
-  calculateOrder,
-);
+router.post("/calculate", validate(calculateOrderSchema), calculateOrder);
 
 router.post("/:id/edit", protect, editOrder);
 router.post("/bulk", protect, createBulkOrders);

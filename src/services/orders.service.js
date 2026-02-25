@@ -15,6 +15,38 @@ const mongoose = require("mongoose");
 // CREATE ORDER
 
 const createOrderService = async (data) => {
+  // Stops (new) or fallback to pickup/drop
+  const stops = data.stops || [
+    {
+      type: "PICKUP",
+      ...data.pickup,
+      name: data.customer?.name,
+      phone: data.customer?.phone,
+    },
+    {
+      type: "DROP",
+      ...data.drop,
+      name: data.customer?.name,
+      phone: data.customer?.phone,
+    },
+  ];
+
+  // Delivery Type
+  data.deliveryType = data.deliveryType || "NOW";
+
+  // Package
+  data.package = data.package || {
+    weight: null,
+    category: null,
+    description: null,
+    declaredValue: data.declaredValue || null,
+  };
+
+  // Payment
+  data.payment = data.payment || {
+    method: "CASH",
+    feePayer: "DROP",
+  };
   const vehicles = await getVehicleTypes();
 
   const validVehicle = vehicles.find(
@@ -69,13 +101,18 @@ const createOrderService = async (data) => {
   const mappedStatus = mapBorzoStatus(providerStatus);
 
   const order = new Order({
-    user: data.user,
-
     borzoOrderId: String(createResponse.order.order_id),
 
     customer: data.customer,
     pickup: data.pickup,
     drop: data.drop,
+
+    stops: stops,
+    deliveryType: data.deliveryType,
+    vehicleTypeId: data.vehicleTypeId,
+    package: data.package,
+    payment: data.payment,
+    user: data.user,
 
     vehicle: {
       type: vehicleTypeFromProvider,

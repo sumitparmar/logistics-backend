@@ -15,30 +15,64 @@ const calculateOrderSchema = Joi.object({
   }).required(),
 });
 
-/**
- * CREATE ORDER
- */
 const createOrderSchema = Joi.object({
+  // existing
   matter: Joi.string().required(),
   declaredValue: Joi.number().min(0).optional(),
   vehicleTypeId: Joi.number().required(),
+
+  // NEW
+  deliveryType: Joi.string().valid("NOW", "EOD", "SCHEDULED").default("NOW"),
+
   customer: Joi.object({
     name: Joi.string().optional(),
     phone: Joi.string().required(),
   }).required(),
 
+  // Backward compatible
   pickup: Joi.object({
     address: Joi.string().required(),
     lat: Joi.number().optional(),
     lng: Joi.number().optional(),
-  }).required(),
+  }).optional(),
 
   drop: Joi.object({
     address: Joi.string().required(),
     lat: Joi.number().optional(),
     lng: Joi.number().optional(),
-  }).required(),
+  }).optional(),
 
+  // NEW preferred structure
+  stops: Joi.array()
+    .items(
+      Joi.object({
+        type: Joi.string().valid("PICKUP", "DROP").required(),
+        address: Joi.string().required(),
+        lat: Joi.number().optional(),
+        lng: Joi.number().optional(),
+        building: Joi.string().optional(),
+        floor: Joi.string().optional(),
+        unit: Joi.string().optional(),
+        instructions: Joi.string().optional(),
+        name: Joi.string().optional(),
+        phone: Joi.string().required(),
+      }),
+    )
+    .optional(),
+
+  package: Joi.object({
+    weight: Joi.number().required(),
+    category: Joi.string().optional(),
+    description: Joi.string().optional(),
+    declaredValue: Joi.number().min(0).optional(),
+  }).optional(),
+
+  payment: Joi.object({
+    method: Joi.string().valid("CASH", "CARD", "WALLET").default("CASH"),
+    feePayer: Joi.string().valid("PICKUP", "DROP").default("DROP"),
+  }).optional(),
+
+  // existing
   cod: Joi.object({
     amount: Joi.number().positive().required(),
   }).optional(),

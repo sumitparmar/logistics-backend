@@ -2,6 +2,9 @@ const mongoose = require("mongoose");
 
 const orderSchema = new mongoose.Schema(
   {
+    // -------------------
+    // CORE REFERENCES
+    // -------------------
     user: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
@@ -14,11 +17,17 @@ const orderSchema = new mongoose.Schema(
       index: true,
     },
 
+    // -------------------
+    // CUSTOMER
+    // -------------------
     customer: {
       name: { type: String, required: true },
       phone: { type: String, required: true },
     },
 
+    // -------------------
+    // LEGACY SINGLE PICKUP/DROP (KEEP)
+    // -------------------
     pickup: {
       address: { type: String, required: true },
       lat: Number,
@@ -31,6 +40,73 @@ const orderSchema = new mongoose.Schema(
       lng: Number,
     },
 
+    // -------------------
+    // NEW MULTI-STOP STRUCTURE
+    // -------------------
+    stops: [
+      {
+        type: {
+          type: String,
+          enum: ["PICKUP", "DROP"],
+          required: true,
+        },
+        address: { type: String, required: true },
+        lat: Number,
+        lng: Number,
+
+        building: String,
+        floor: String,
+        unit: String,
+        instructions: String,
+
+        name: String,
+        phone: String,
+      },
+    ],
+
+    // -------------------
+    // DELIVERY CONFIG
+    // -------------------
+    deliveryType: {
+      type: String,
+      enum: ["NOW", "EOD", "SCHEDULED"],
+      default: "NOW",
+    },
+
+    vehicleTypeId: {
+      type: Number,
+      index: true,
+    },
+
+    // -------------------
+    // PACKAGE DETAILS
+    // -------------------
+    package: {
+      weight: Number,
+      category: String,
+      description: String,
+      declaredValue: Number,
+    },
+
+    // -------------------
+    // PAYMENT DETAILS
+    // -------------------
+    payment: {
+      method: {
+        type: String,
+        enum: ["CASH", "CARD", "WALLET"],
+        default: "CASH",
+      },
+      feePayer: {
+        type: String,
+        enum: ["PICKUP", "DROP"],
+        default: "DROP",
+      },
+    },
+
+    // -------------------
+    // VEHICLE (PROVIDER RESPONSE)
+    // -------------------
     vehicle: {
       type: {
         type: String,
@@ -38,6 +114,9 @@ const orderSchema = new mongoose.Schema(
       },
     },
 
+    // -------------------
+    // COURIER INFO
+    // -------------------
     courier: {
       courierId: Number,
       name: String,
@@ -51,6 +130,9 @@ const orderSchema = new mongoose.Schema(
       },
     },
 
+    // -------------------
+    // DELIVERY STATUS
+    // -------------------
     delivery: {
       deliveryId: Number,
       status: String,
@@ -59,6 +141,9 @@ const orderSchema = new mongoose.Schema(
       trackingUrl: String,
     },
 
+    // -------------------
+    // PRICING
+    // -------------------
     pricing: {
       amount: { type: Number, required: true },
       currency: { type: String, required: true },
@@ -80,6 +165,9 @@ const orderSchema = new mongoose.Schema(
       },
     },
 
+    // -------------------
+    // ORDER STATUS
+    // -------------------
     status: {
       type: String,
       enum: [
@@ -116,6 +204,9 @@ const orderSchema = new mongoose.Schema(
       },
     ],
 
+    // -------------------
+    // PROVIDER
+    // -------------------
     provider: {
       type: String,
       default: "BORZO",
