@@ -14,6 +14,7 @@ const apiLimiter = rateLimit({
 const errorHandler = require("./middlewares/errorHandler");
 const authRoutes = require("./routes/auth.routes");
 const ordersRoutes = require("./routes/orders.routes");
+const dashboardRoutes = require("./routes/dashboard.routes");
 const webhooksRoutes = require("./routes/webhooks.routes");
 const reconciliationRoutes = require("./routes/reconciliation.routes");
 const requestId = require("./middlewares/requestId");
@@ -30,11 +31,19 @@ app.set("trust proxy", 1);
 
 // Request ID
 app.use(requestId);
-app.use("/api/providers", providerCatalogRoutes);
 
 // Security
 app.use(helmet());
-app.use(cors());
+
+const corsOptions = {
+  origin: ["http://localhost:4200"],
+  methods: ["GET", "POST", "PUT", "DELETE"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  credentials: true,
+};
+
+app.use(cors(corsOptions));
+app.use("/api/providers", providerCatalogRoutes);
 app.use(apiLimiter);
 app.use(
   express.json({
@@ -47,6 +56,7 @@ app.use(
 
 // Routes
 app.use("/api/orders", ordersRoutes);
+app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/analytics", protect, analyticsRoutes);
 app.use("/api/webhooks", webhooksRoutes);
 app.use("/api/auth", authRoutes);

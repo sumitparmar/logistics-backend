@@ -44,8 +44,8 @@ router.post(
 router.get("/list", protect, getOrders);
 
 // SINGLE
-router.get("/:id", protect, getOrderById);
-
+// router.get("/:id", protect, getOrderById);
+router.get("/:id", getOrderById);
 router.get("/:id/courier", protect, getCourierInfo);
 
 // ACTIONS
@@ -75,7 +75,7 @@ router.get("/provider/bank-cards", protect, allowRoles("Admin"), getBankCards);
 
 router.get("/provider/labels", protect, allowRoles("Admin"), getLabels);
 
-router.get("/:id/tracking", protect, getTracking);
+router.get("/:id/tracking", getTracking);
 
 router.get("/:id/pod", protect, getPOD);
 

@@ -155,14 +155,20 @@ const getOrdersService = async (userId) => {
 
 // GET SINGLE ORDER
 
-const getOrderByIdService = async (id, userId) => {
+const getOrderByIdService = async (id, userId = null) => {
   if (!mongoose.Types.ObjectId.isValid(id)) {
     const err = new Error("Invalid order id");
     err.statusCode = 400;
     throw err;
   }
 
-  return Order.findOne({ _id: id, user: userId });
+  // If called from protected route
+  if (userId) {
+    return Order.findOne({ _id: id, user: userId });
+  }
+
+  // If called from public track route
+  return Order.findById(id);
 };
 
 // CANCEL ORDER
@@ -406,9 +412,14 @@ const getLabelsService = async (filters) => {
 
   return response.labels || [];
 };
-
 const getTrackingService = async (id, userId) => {
-  const order = await Order.findOne({ _id: id, user: userId });
+  let order;
+
+  if (userId) {
+    order = await Order.findOne({ _id: id, user: userId });
+  } else {
+    order = await Order.findById(id);
+  }
 
   if (!order) {
     const err = new Error("Order not found");
@@ -418,24 +429,19 @@ const getTrackingService = async (id, userId) => {
 
   const response = await pulseService.getTracking(order.borzoOrderId);
 
-  if (
-    !response?.is_successful ||
-    !response?.orders ||
-    response.orders.length === 0
-  ) {
-    const err = new Error("Failed to fetch tracking info");
-    err.statusCode = 400;
-    throw err;
+  if (!response?.is_successful || !response?.orders?.length) {
+    return { tracking_url: null };
   }
 
   const borzoOrder = response.orders[0];
 
+  const url =
+    borzoOrder.points?.find((p) => p.tracking_url)?.tracking_url || null;
+
   return {
-    trackingUrl:
-      borzoOrder.points?.find((p) => p.tracking_url)?.tracking_url || null,
+    tracking_url: url,
   };
 };
-
 const getPODService = async (id, userId) => {
   const order = await Order.findOne({ _id: id, user: userId });
 

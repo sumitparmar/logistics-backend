@@ -55,8 +55,10 @@ const getOrders = async (req, res, next) => {
 
 const getOrderById = async (req, res, next) => {
   try {
-    const order = await getOrderByIdService(req.params.id, req.user._id);
-
+    const order = await getOrderByIdService(
+      req.params.id,
+      req.user ? req.user._id : null,
+    );
     if (!order) {
       return sendError(res, "Order not found", 404);
     }
@@ -194,7 +196,10 @@ const getLabels = async (req, res, next) => {
 
 const getTracking = async (req, res, next) => {
   try {
-    const data = await getTrackingService(req.params.id, req.user._id);
+    const data = await getTrackingService(
+      req.params.id,
+      req.user ? req.user._id : null,
+    );
     return sendSuccess(res, data, "Tracking URL fetched");
   } catch (error) {
     next(error);
