@@ -204,9 +204,6 @@ const orderSchema = new mongoose.Schema(
       },
     ],
 
-    // -------------------
-    // PROVIDER
-    // -------------------
     provider: {
       type: String,
       default: "BORZO",

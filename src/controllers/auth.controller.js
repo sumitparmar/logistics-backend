@@ -1,7 +1,7 @@
 const authService = require("../services/auth.service");
 const { sendOtp, verifyOtp } = require("../services/auth.service");
 const { sendSuccess, sendError } = require("../utils/response");
-
+const { verifyEmail } = require("../services/auth.service");
 // REGISTER
 
 const register = async (req, res, next) => {
@@ -62,6 +62,22 @@ const verifyOtpController = async (req, res, next) => {
   }
 };
 
+const verifyEmailController = async (req, res, next) => {
+  try {
+    const { token } = req.query;
+
+    if (!token) {
+      return sendError(res, "Verification token required", 400);
+    }
+
+    await verifyEmail(token);
+
+    return res.redirect(`${process.env.FRONTEND_URL}/auth/login?verified=true`);
+  } catch (error) {
+    next(error);
+  }
+};
+
 // EXPORTS
 
 module.exports = {
@@ -69,4 +85,5 @@ module.exports = {
   login,
   sendOtpController,
   verifyOtpController,
+  verifyEmailController,
 };

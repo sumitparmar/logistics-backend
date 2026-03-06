@@ -1,3 +1,4 @@
+const DEFAULT_BORZO_VEHICLE = 8;
 const mapCalculatePayload = (data) => {
   if (!data.matter) {
     throw new Error("matter is required");
@@ -7,14 +8,18 @@ const mapCalculatePayload = (data) => {
     throw new Error("pickup.address and drop.address are required");
   }
 
+  const allowedVehicles = [DEFAULT_BORZO_VEHICLE];
+
+  const vehicleId = allowedVehicles.includes(Number(data.vehicleTypeId))
+    ? Number(data.vehicleTypeId)
+    : DEFAULT_BORZO_VEHICLE;
+
   const payload = {
     matter: data.matter,
-    vehicle_type_id: data.vehicleTypeId || 8,
-
+    vehicle_type_id: vehicleId,
     points: [{ address: data.pickup.address }, { address: data.drop.address }],
   };
 
-  // End-of-day order
   if (data.orderType === "END_OF_DAY") {
     payload.type = "endofday";
   }
@@ -61,10 +66,15 @@ const mapCreateOrderPayload = (data) => {
     dropPoint.taking_amount = Number(data.cod.amount);
   }
 
+  const allowedVehicles = [DEFAULT_BORZO_VEHICLE];
+
+  const vehicleId = allowedVehicles.includes(Number(data.vehicleTypeId))
+    ? Number(data.vehicleTypeId)
+    : DEFAULT_BORZO_VEHICLE;
+
   const payload = {
     matter: data.matter,
-    vehicle_type_id: data.vehicleTypeId || 8,
-
+    vehicle_type_id: vehicleId,
     points: [pickupPoint, dropPoint],
   };
 

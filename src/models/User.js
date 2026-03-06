@@ -48,6 +48,16 @@ const userSchema = new mongoose.Schema(
       default: false,
     },
 
+    emailVerificationToken: {
+      type: String,
+      select: false,
+    },
+
+    emailVerificationExpires: {
+      type: Date,
+      select: false,
+    },
+
     // ACCOUNT STATUS
     isActive: {
       type: Boolean,

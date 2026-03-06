@@ -149,8 +149,76 @@ const createOrderService = async (data) => {
 
 // LIST ORDERS
 
-const getOrdersService = async (userId) => {
-  return Order.find({ user: userId }).sort({ createdAt: -1 });
+// const getOrdersService = async (userId) => {
+//   return Order.find({ user: userId }).sort({ createdAt: -1 });
+// };
+
+const getOrdersService = async (userId, query = {}) => {
+  const page = parseInt(query.page) || 1;
+  const limit = parseInt(query.limit) || 10;
+
+  const skip = (page - 1) * limit;
+
+  const filter = { user: userId };
+
+  // STATUS FILTER
+  if (query.status) {
+    filter.status = query.status;
+  }
+
+  // SEARCH FILTER
+  if (query.search) {
+    const regex = new RegExp(query.search, "i");
+
+    filter.$or = [
+      { borzoOrderId: regex },
+      { "pickup.address": regex },
+      { "drop.address": regex },
+    ];
+  }
+
+  const sortBy = query.sortBy || "createdAt";
+  const sortOrder = query.sortOrder === "asc" ? 1 : -1;
+
+  const [orders, total, active, delivered, cancelled] = await Promise.all([
+    Order.find(filter)
+      .sort({ [sortBy]: sortOrder })
+      .skip(skip)
+      .limit(limit)
+      .lean(),
+
+    Order.countDocuments({ user: userId }),
+
+    Order.countDocuments({
+      user: userId,
+      status: { $in: ["CREATED", "ASSIGNED", "PICKED_UP", "IN_TRANSIT"] },
+    }),
+
+    Order.countDocuments({
+      user: userId,
+      status: "DELIVERED",
+    }),
+
+    Order.countDocuments({
+      user: userId,
+      status: "CANCELLED",
+    }),
+  ]);
+
+  return {
+    data: orders,
+    meta: {
+      total,
+      page,
+      limit,
+      stats: {
+        total,
+        active,
+        delivered,
+        cancelled,
+      },
+    },
+  };
 };
 
 // GET SINGLE ORDER

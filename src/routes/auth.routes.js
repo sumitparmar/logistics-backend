@@ -34,7 +34,7 @@ router.post(
   validate(registerSchema),
   authController.register,
 );
-
+router.get("/verify-email", authController.verifyEmailController);
 router.post("/login", authLimiter, validate(loginSchema), authController.login);
 
 module.exports = router;

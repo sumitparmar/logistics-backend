@@ -14,6 +14,7 @@ connectDB();
 startReconciliationJob();
 startProviderHealthJob();
 startOrderSyncJob();
+
 //  START SERVER
 
 const http = require("http");
@@ -23,3 +24,4 @@ const server = http.createServer(app);
 initSocket(server);
 
 server.listen(PORT, () => {});
+require("./workers/otp.worker");

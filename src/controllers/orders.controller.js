@@ -42,10 +42,24 @@ const createOrder = async (req, res, next) => {
 
 // GET ALL ORDERS
 
+// const getOrders = async (req, res, next) => {
+//   try {
+//     const orders = await getOrdersService(req.user._id);
+//     return sendSuccess(res, orders, "Orders fetched");
+//   } catch (error) {
+//     next(error);
+//   }
+// };
+
 const getOrders = async (req, res, next) => {
   try {
-    const orders = await getOrdersService(req.user._id);
-    return sendSuccess(res, orders, "Orders fetched");
+    const result = await getOrdersService(req.user._id, req.query);
+
+    return res.json({
+      success: true,
+      data: result.data,
+      meta: result.meta,
+    });
   } catch (error) {
     next(error);
   }

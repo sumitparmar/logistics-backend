@@ -4,13 +4,20 @@ const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
 const adminRoutes = require("./routes/admin.routes");
 const protect = require("./middlewares/auth.middleware");
+
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 300, // requests per IP
+  max: 300,
   standardHeaders: true,
   legacyHeaders: false,
+  message: {
+    success: false,
+    message: "Too many requests. Please try again later.",
+  },
 });
 
+require("./config/redis");
+require("./workers/otp.worker");
 const errorHandler = require("./middlewares/errorHandler");
 const authRoutes = require("./routes/auth.routes");
 const ordersRoutes = require("./routes/orders.routes");
@@ -36,7 +43,7 @@ app.use(requestId);
 app.use(helmet());
 
 const corsOptions = {
-  origin: ["http://localhost:4200"],
+  origin: process.env.FRONTEND_URL || "http://localhost:4200",
   methods: ["GET", "POST", "PUT", "DELETE"],
   allowedHeaders: ["Content-Type", "Authorization"],
   credentials: true,
@@ -55,7 +62,7 @@ app.use(
 );
 
 // Routes
-app.use("/api/orders", ordersRoutes);
+app.use("/api/orders", protect, ordersRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/analytics", protect, analyticsRoutes);
 app.use("/api/webhooks", webhooksRoutes);
@@ -69,7 +76,11 @@ app.use("/api/invoices", invoiceRoutes);
 
 // Health
 app.get("/", (req, res) => {
-  res.json({ status: "Backend running" });
+  res.json({
+    status: "Backend running",
+    uptime: process.uptime(),
+    timestamp: new Date(),
+  });
 });
 
 // Error Handler (last)
