@@ -480,6 +480,7 @@ const getLabelsService = async (filters) => {
 
   return response.labels || [];
 };
+
 const getTrackingService = async (id, userId) => {
   let order;
 
@@ -506,10 +507,19 @@ const getTrackingService = async (id, userId) => {
   const url =
     borzoOrder.points?.find((p) => p.tracking_url)?.tracking_url || null;
 
+  const points =
+    borzoOrder.points?.map((p) => ({
+      latitude: p.latitude || null,
+      longitude: p.longitude || null,
+      delivery: !!p.delivery,
+    })) || [];
+
   return {
     tracking_url: url,
+    points,
   };
 };
+
 const getPODService = async (id, userId) => {
   const order = await Order.findOne({ _id: id, user: userId });
 
