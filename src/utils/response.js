@@ -13,10 +13,18 @@ const sendSuccess = (
   });
 };
 
-const sendError = (res, message = "Something went wrong", status = 500) => {
+const sendError = (
+  res,
+  message = "Something went wrong",
+  status = 500,
+  code = null,
+  meta = null,
+) => {
   return res.status(status).json({
     success: false,
     message,
+    ...(code && { code }),
+    ...(meta && { meta }),
   });
 };
 

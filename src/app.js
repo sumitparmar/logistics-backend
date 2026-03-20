@@ -62,7 +62,7 @@ app.use(
 );
 
 // Routes
-app.use("/api/orders", protect, ordersRoutes);
+app.use("/api/orders", ordersRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/analytics", protect, analyticsRoutes);
 app.use("/api/webhooks", webhooksRoutes);

@@ -15,6 +15,8 @@ const mongoose = require("mongoose");
 // CREATE ORDER
 
 const createOrderService = async (data) => {
+  console.log("PACKAGE DATA:", data.package);
+  console.log("DECLARED VALUE:", data);
   // Stops (new) or fallback to pickup/drop
   const stops = data.stops || [
     {
@@ -67,7 +69,18 @@ const createOrderService = async (data) => {
     throw new Error("Price calculation failed");
   }
 
-  const amount = Number(priceResponse.order.payment_amount);
+  const baseAmount = Number(
+    Number(priceResponse.order.payment_amount).toFixed(2),
+  );
+  const declaredValue = data.package?.declaredValue || 0;
+
+  let insuranceCharge = 0;
+
+  if (declaredValue > 0) {
+    insuranceCharge = Math.round(2 + declaredValue * 0.01);
+  }
+
+  const finalAmount = Number((baseAmount + insuranceCharge).toFixed(2));
   let createPayload;
 
   // END-OF-DAY FLOW
@@ -119,8 +132,11 @@ const createOrderService = async (data) => {
     },
 
     pricing: {
-      amount,
+      baseAmount,
+      insurance: insuranceCharge,
+      amount: finalAmount,
       currency: process.env.CURRENCY,
+      calculatedAt: new Date(), // 🔥 add this
     },
 
     cod: {
