@@ -2,8 +2,16 @@ const LogisticsProvider = require("../interfaces/logisticsProvider.interface");
 const client = require("./borzo.http");
 
 class BorzoProvider extends LogisticsProvider {
+  // async calculatePrice(payload) {
+  //   return client.post("/calculate-order", payload);
+  // }
+
   async calculatePrice(payload) {
-    return client.post("/calculate-order", payload);
+    return client.post("/calculate-order", payload, {
+      headers: {
+        Authorization: `Bearer ${process.env.BORZO_API_TOKEN}`, // ✅ only here
+      },
+    });
   }
 
   async createOrder(payload) {

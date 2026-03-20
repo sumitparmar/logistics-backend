@@ -7,10 +7,13 @@ const paymentIntentSchema = new mongoose.Schema(
       ref: "User",
       required: true,
     },
-
+    order: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Order",
+    },
     gateway: {
       type: String,
-      enum: ["RAZORPAY"],
+      enum: ["RAZORPAY", "PULSE"],
       required: true,
     },
 
@@ -48,6 +51,10 @@ const paymentIntentSchema = new mongoose.Schema(
       ],
       default: "CREATED",
     },
+    refundedAt: {
+      type: Date,
+      default: null,
+    },
 
     statusHistory: [
       {
@@ -65,6 +72,10 @@ const paymentIntentSchema = new mongoose.Schema(
 );
 
 paymentIntentSchema.index({ gatewayOrderId: 1 });
-paymentIntentSchema.index({ gatewayPaymentId: 1 });
+paymentIntentSchema.index(
+  { gatewayPaymentId: 1 },
+  { unique: true, sparse: true },
+);
+paymentIntentSchema.index({ status: 1, refundedAt: -1 });
 
 module.exports = mongoose.model("PaymentIntent", paymentIntentSchema);

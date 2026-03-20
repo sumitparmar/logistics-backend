@@ -27,46 +27,68 @@ const createPaymentIntent = async ({
 };
 
 // MARK PROCESSING
+
 const markProcessing = async (intentId) => {
-  const intent = await PaymentIntent.findById(intentId);
-  if (!intent) return null;
-
-  if (intent.status !== "CREATED") return intent;
-
-  intent.status = "PROCESSING";
-  intent.statusHistory.push({ status: "PROCESSING" });
-  await intent.save();
-
-  return intent;
+  return PaymentIntent.findOneAndUpdate(
+    {
+      _id: intentId,
+      status: "CREATED",
+    },
+    {
+      $set: { status: "PROCESSING" },
+      $push: { statusHistory: { status: "PROCESSING" } },
+    },
+    { new: true },
+  );
 };
 
 // MARK SUCCESS
+
 const markSuccess = async ({ intentId, gatewayPaymentId, metadata }) => {
-  const intent = await PaymentIntent.findById(intentId);
-  if (!intent) return null;
+  const intent = await PaymentIntent.findOneAndUpdate(
+    {
+      _id: intentId,
+      status: "PROCESSING",
+    },
+    {
+      $set: {
+        status: "SUCCESS",
+        gatewayPaymentId,
+        metadata,
+      },
+      $push: {
+        statusHistory: { status: "SUCCESS" },
+      },
+    },
+    { new: true },
+  );
 
-  if (intent.status === "SUCCESS") return intent;
+  if (!intent) {
+    return null; // already processed or invalid state
+  }
 
-  intent.status = "SUCCESS";
-  intent.gatewayPaymentId = gatewayPaymentId;
-  intent.metadata = metadata;
-  intent.statusHistory.push({ status: "SUCCESS" });
-
-  await intent.save();
   return intent;
 };
 
 // MARK FAILED
+
 const markFailed = async ({ intentId, metadata }) => {
-  const intent = await PaymentIntent.findById(intentId);
-  if (!intent) return null;
-
-  intent.status = "FAILED";
-  intent.metadata = metadata;
-  intent.statusHistory.push({ status: "FAILED" });
-
-  await intent.save();
-  return intent;
+  return PaymentIntent.findOneAndUpdate(
+    {
+      _id: intentId,
+      status: { $in: ["CREATED", "PROCESSING"] },
+    },
+    {
+      $set: {
+        status: "FAILED",
+        metadata,
+      },
+      $push: {
+        statusHistory: { status: "FAILED" },
+      },
+    },
+    { new: true },
+  );
 };
 
 module.exports = {

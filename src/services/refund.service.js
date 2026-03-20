@@ -45,6 +45,8 @@ const completeRefund = async ({ gatewayOrderId }) => {
 
   // Mark refunded
   intent.status = "REFUNDED";
+  intent.refundedAt = new Date(); // add here
+
   intent.statusHistory.push({ status: "REFUNDED" });
   await intent.save();
 

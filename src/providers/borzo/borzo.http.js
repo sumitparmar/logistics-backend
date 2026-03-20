@@ -11,20 +11,24 @@ const axiosClient = axios.create({
     "X-DV-Auth-Token": env.BORZO.API_TOKEN,
     "Content-Type": "application/json",
   },
-});
 
-/* ---------------- RETRY ---------------- */
+  // headers: {
+  //   Authorization: `Bearer ${env.BORZO.API_TOKEN}`,
+  //   "Content-Type": "application/json",
+  // },
+});
 
 axiosRetry(axiosClient, {
   retries: 3,
   retryDelay: axiosRetry.exponentialDelay,
-  retryCondition: (error) =>
-    axiosRetry.isNetworkError(error) ||
-    axiosRetry.isRetryableError(error) ||
-    error.response?.status >= 500,
-});
+  retryCondition: (error) => {
+    if (axiosRetry.isNetworkError(error)) return true;
 
-// CIRCUIT BREAKER
+    const status = error.response?.status;
+
+    return status >= 500;
+  },
+});
 
 const breakerOptions = {
   timeout: 20000,
@@ -33,15 +37,23 @@ const breakerOptions = {
 };
 
 const breaker = new CircuitBreaker(
-  (config) => axiosClient(config),
-  breakerOptions,
+  async (config) => {
+    const response = await axiosClient(config);
+    return response;
+  },
+  {
+    ...breakerOptions,
+
+    errorFilter: (err) => {
+      const status = err.response?.status;
+      return status && status < 500;
+    },
+  },
 );
 
 breaker.on("open", () => logger.error("BORZO CIRCUIT OPEN"));
 breaker.on("halfOpen", () => logger.warn("BORZO CIRCUIT HALF-OPEN"));
 breaker.on("close", () => logger.info("BORZO CIRCUIT CLOSED"));
-
-// REQUEST WRAPPER
 
 const client = async (config) => {
   logger.info("BORZO REQUEST", {
@@ -61,14 +73,15 @@ const client = async (config) => {
     return response.data;
   } catch (error) {
     logger.error("BORZO ERROR", {
+      url: config.url,
       status: error.response?.status,
       data: error.response?.data,
+      message: error.message,
     });
 
     throw error;
   }
 };
-//  HTTP METHODS
 
 client.get = (url, options = {}) => client({ method: "get", url, ...options });
 

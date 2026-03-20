@@ -225,5 +225,6 @@ const orderSchema = new mongoose.Schema(
 
 orderSchema.index({ borzoOrderId: 1, provider: 1 }, { unique: true });
 orderSchema.index({ user: 1 });
-
+orderSchema.index({ user: 1, createdAt: -1 });
+orderSchema.index({ user: 1, status: 1 });
 module.exports = mongoose.model("Order", orderSchema);

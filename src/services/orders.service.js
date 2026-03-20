@@ -154,8 +154,8 @@ const createOrderService = async (data) => {
 // };
 
 const getOrdersService = async (userId, query = {}) => {
-  const page = parseInt(query.page) || 1;
-  const limit = parseInt(query.limit) || 10;
+  const page = Math.max(parseInt(query.page) || 1, 1);
+  const limit = Math.min(parseInt(query.limit) || 10, 50);
 
   const skip = (page - 1) * limit;
 
