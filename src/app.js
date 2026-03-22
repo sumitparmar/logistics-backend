@@ -1,10 +1,14 @@
 require("dotenv").config();
+
 const express = require("express");
 const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
+const cors = require("cors");
+
 const adminRoutes = require("./routes/admin.routes");
 const protect = require("./middlewares/auth.middleware");
 
+// RATE LIMITER
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 300,
@@ -16,8 +20,10 @@ const apiLimiter = rateLimit({
   },
 });
 
+// INIT SERVICES
 require("./config/redis");
 require("./workers/otp.worker");
+
 const errorHandler = require("./middlewares/errorHandler");
 const authRoutes = require("./routes/auth.routes");
 const ordersRoutes = require("./routes/orders.routes");
@@ -25,23 +31,30 @@ const dashboardRoutes = require("./routes/dashboard.routes");
 const webhooksRoutes = require("./routes/webhooks.routes");
 const reconciliationRoutes = require("./routes/reconciliation.routes");
 const requestId = require("./middlewares/requestId");
-const cors = require("cors");
+
 const vehiclesRoutes = require("./routes/vehicles.routes");
 const paymentsRoutes = require("./routes/payments.routes");
 const paymentWebhookRoutes = require("./routes/paymentWebhooks.routes");
 const providerCatalogRoutes = require("./routes/providerCatalog.routes");
-const app = express(); // FIRST create app
+
 const analyticsRoutes = require("./routes/analytics.routes");
 const invoiceRoutes = require("./routes/invoice.routes");
 const addressRoutes = require("./routes/address.routes");
-// MUST BE FIRST
+
+const app = express();
+
+// TRUST PROXY (RENDER)
 app.set("trust proxy", 1);
 
-// Request ID
+// REQUEST ID
 app.use(requestId);
 
-// Security
+// SECURITY
 app.use(helmet());
+
+/* =========================
+   CORS CONFIG (FINAL)
+========================= */
 
 const allowedOrigins = [
   "http://localhost:4200",
@@ -49,31 +62,48 @@ const allowedOrigins = [
 ];
 
 const corsOptions = {
-  origin: (origin, callback) => {
-    // allow server-to-server or Postman
+  origin: function (origin, callback) {
+    // allow no-origin (Postman, mobile apps)
     if (!origin) return callback(null, true);
 
-    // normalize origin (remove trailing slash)
     const normalizedOrigin = origin.replace(/\/$/, "");
 
-    const isAllowed = allowedOrigins.some(
-      (allowed) => normalizedOrigin === allowed,
-    );
-
-    if (isAllowed) {
-      callback(null, true);
+    if (allowedOrigins.includes(normalizedOrigin)) {
+      return callback(null, true);
     } else {
-      console.log("❌ Blocked by CORS:", origin); // IMPORTANT for debugging
-      callback(null, false); // don't throw error → prevents crash
+      console.log("❌ CORS BLOCKED:", origin);
+      return callback(null, false); // do NOT throw error
     }
   },
   credentials: true,
 };
 
+// APPLY CORS
 app.use(cors(corsOptions));
-// app.options("*", cors(corsOptions));
-app.use("/api/providers", providerCatalogRoutes);
+
+// HANDLE PREFLIGHT (CRITICAL)
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", req.headers.origin || "*");
+  res.header("Access-Control-Allow-Credentials", "true");
+  res.header(
+    "Access-Control-Allow-Headers",
+    "Origin, X-Requested-With, Content-Type, Accept, Authorization",
+  );
+  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(200);
+  }
+
+  next();
+});
+
+/* =========================
+   MIDDLEWARE
+========================= */
+
 app.use(apiLimiter);
+
 app.use(
   express.json({
     limit: "100kb",
@@ -83,7 +113,11 @@ app.use(
   }),
 );
 
-// Routes
+/* =========================
+   ROUTES
+========================= */
+
+app.use("/api/providers", providerCatalogRoutes);
 app.use("/api/orders", ordersRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/analytics", protect, analyticsRoutes);
@@ -97,7 +131,11 @@ app.use("/api/payment-webhooks", paymentWebhookRoutes);
 app.use("/api/invoices", invoiceRoutes);
 app.use("/api/addresses", protect, addressRoutes);
 app.use("/api/meta", require("./routes/meta.routes"));
-// Health
+
+/* =========================
+   HEALTH CHECK
+========================= */
+
 app.get("/", (req, res) => {
   res.json({
     status: "Backend running",
@@ -106,7 +144,10 @@ app.get("/", (req, res) => {
   });
 });
 
-// Error Handler (last)
+/* =========================
+   ERROR HANDLER (LAST)
+========================= */
+
 app.use(errorHandler);
 
 module.exports = app;
