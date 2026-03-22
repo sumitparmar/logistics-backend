@@ -49,18 +49,24 @@ const allowedOrigins = [
 ];
 
 const corsOptions = {
-  origin: function (origin, callback) {
-    // allow requests with no origin (like mobile apps / Postman)
+  origin: (origin, callback) => {
+    // allow server-to-server or Postman
     if (!origin) return callback(null, true);
 
-    if (allowedOrigins.includes(origin)) {
-      return callback(null, true);
+    // normalize origin (remove trailing slash)
+    const normalizedOrigin = origin.replace(/\/$/, "");
+
+    const isAllowed = allowedOrigins.some(
+      (allowed) => normalizedOrigin === allowed,
+    );
+
+    if (isAllowed) {
+      callback(null, true);
     } else {
-      return callback(new Error("Not allowed by CORS"));
+      console.log("❌ Blocked by CORS:", origin); // IMPORTANT for debugging
+      callback(null, false); // don't throw error → prevents crash
     }
   },
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"],
   credentials: true,
 };
 
