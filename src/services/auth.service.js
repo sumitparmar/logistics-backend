@@ -34,6 +34,8 @@ const registerUser = async (data) => {
   });
 
   const verificationUrl = `${process.env.API_BASE_URL}/api/auth/verify-email?token=${verificationToken}`;
+
+  console.log("🔗 VERIFY LINK:", verificationUrl);
   sendEmail(
     user.email,
     "Verify your email - MoveKart Logistics",
