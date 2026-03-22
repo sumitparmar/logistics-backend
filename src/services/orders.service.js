@@ -17,7 +17,21 @@ const mongoose = require("mongoose");
 const createOrderService = async (data) => {
   console.log("PACKAGE DATA:", data.package);
   console.log("DECLARED VALUE:", data);
-  // Stops (new) or fallback to pickup/drop
+
+  if (data.deliveryType === "SCHEDULED") {
+    data.scheduledAt =
+      data.scheduledAt || data.scheduleDateTime || data.schedule || null;
+
+    console.log("SCHEDULE DEBUG:", {
+      deliveryType: data.deliveryType,
+      scheduledAt: data.scheduledAt,
+    });
+
+    if (!data.scheduledAt) {
+      throw new Error("scheduledAt missing at service level");
+    }
+  }
+
   const stops = data.stops || [
     {
       type: "PICKUP",
@@ -375,8 +389,22 @@ const calculateOrderService = async (data) => {
 
   const response = await pulseService.calculateOrder(payload);
 
+  let amount = Number(response.order.payment_amount);
+
+  if (data.deliveryType === "NOW") {
+    amount = Math.round(amount * 1.2);
+  }
+
+  if (data.deliveryType === "EOD") {
+    amount = Math.round(amount * 1.0);
+  }
+
+  if (data.deliveryType === "SCHEDULED") {
+    amount = Math.round(amount * 0.9);
+  }
+
   return {
-    amount: Number(response.order.payment_amount),
+    amount,
     currency: process.env.CURRENCY,
   };
 };

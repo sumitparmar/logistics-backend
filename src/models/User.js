@@ -75,6 +75,12 @@ const userSchema = new mongoose.Schema(
     lastLoginAt: {
       type: Date,
     },
+
+    deliveryMode: {
+      type: String,
+      enum: ["PERSONAL", "BUSINESS"],
+      default: null,
+    },
   },
   {
     timestamps: true,

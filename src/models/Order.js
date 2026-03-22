@@ -64,13 +64,9 @@ const orderSchema = new mongoose.Schema(
       },
     ],
 
-    // -------------------
-    // DELIVERY CONFIG
-    // -------------------
     deliveryType: {
       type: String,
-      enum: ["NOW", "EOD", "SCHEDULED"],
-      default: "NOW",
+      enum: ["NOW", "EOD", "END_OF_DAY", "SCHEDULED"],
     },
 
     vehicleTypeId: {
@@ -78,9 +74,6 @@ const orderSchema = new mongoose.Schema(
       index: true,
     },
 
-    // -------------------
-    // PACKAGE DETAILS
-    // -------------------
     package: {
       weight: Number,
       category: String,
@@ -88,9 +81,6 @@ const orderSchema = new mongoose.Schema(
       declaredValue: Number,
     },
 
-    // -------------------
-    // PAYMENT DETAILS
-    // -------------------
     payment: {
       method: {
         type: String,
@@ -104,9 +94,6 @@ const orderSchema = new mongoose.Schema(
       },
     },
 
-    // -------------------
-    // VEHICLE (PROVIDER RESPONSE)
-    // -------------------
     vehicle: {
       type: {
         type: String,
@@ -114,9 +101,6 @@ const orderSchema = new mongoose.Schema(
       },
     },
 
-    // -------------------
-    // COURIER INFO
-    // -------------------
     courier: {
       courierId: Number,
       name: String,
@@ -130,9 +114,6 @@ const orderSchema = new mongoose.Schema(
       },
     },
 
-    // -------------------
-    // DELIVERY STATUS
-    // -------------------
     delivery: {
       deliveryId: Number,
       status: String,
@@ -141,9 +122,6 @@ const orderSchema = new mongoose.Schema(
       trackingUrl: String,
     },
 
-    // -------------------
-    // PRICING
-    // -------------------
     pricing: {
       amount: { type: Number, required: true },
       currency: { type: String, required: true },
@@ -165,9 +143,6 @@ const orderSchema = new mongoose.Schema(
       },
     },
 
-    // -------------------
-    // ORDER STATUS
-    // -------------------
     status: {
       type: String,
       enum: [

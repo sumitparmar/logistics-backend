@@ -33,6 +33,7 @@ const providerCatalogRoutes = require("./routes/providerCatalog.routes");
 const app = express(); // FIRST create app
 const analyticsRoutes = require("./routes/analytics.routes");
 const invoiceRoutes = require("./routes/invoice.routes");
+const addressRoutes = require("./routes/address.routes");
 // MUST BE FIRST
 app.set("trust proxy", 1);
 
@@ -73,7 +74,8 @@ app.use("/api/reconciliation", reconciliationRoutes);
 app.use("/api/admin", protect, adminRoutes);
 app.use("/api/payment-webhooks", paymentWebhookRoutes);
 app.use("/api/invoices", invoiceRoutes);
-
+app.use("/api/addresses", protect, addressRoutes);
+app.use("/api/meta", require("./routes/meta.routes"));
 // Health
 app.get("/", (req, res) => {
   res.json({

@@ -19,12 +19,12 @@ otpQueue.process(CONCURRENCY, async (job) => {
       try {
         await sendEmail(
           email,
-          "Your OTP - PULSE Logistics",
+          "Your OTP - MoveKart",
           `
-            <h3>Your Login OTP</h3>
-            <h2>${otp}</h2>
-            <p>This OTP is valid for 5 minutes.</p>
-          `,
+    <h2>MoveKart Login OTP</h2>
+    <h3>${otp}</h3>
+    <p>This OTP is valid for 5 minutes.</p>
+  `,
         );
       } catch (emailError) {
         console.error(

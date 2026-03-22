@@ -22,8 +22,15 @@ const createOrderSchema = Joi.object({
   vehicleTypeId: Joi.number().required(),
 
   // NEW
-  deliveryType: Joi.string().valid("NOW", "EOD", "SCHEDULED").default("NOW"),
+  deliveryType: Joi.string()
+    .valid("NOW", "END_OF_DAY", "SCHEDULED")
+    .default("NOW"),
 
+  scheduledAt: Joi.string().when("deliveryType", {
+    is: "SCHEDULED",
+    then: Joi.required(),
+    otherwise: Joi.optional(),
+  }),
   customer: Joi.object({
     name: Joi.string().optional(),
     phone: Joi.string().required(),

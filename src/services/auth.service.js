@@ -36,9 +36,9 @@ const registerUser = async (data) => {
   const verificationUrl = `${process.env.API_BASE_URL}/api/auth/verify-email?token=${verificationToken}`;
   await sendEmail(
     user.email,
-    "Verify your email - PULSE Logistics",
+    "Verify your email - MoveKart Logistics",
     `
-    <h3>Welcome to PULSE Logistics</h3>
+    <h3>Welcome to MoveKart Logistics</h3>
     <p>Please verify your email by clicking the link below:</p>
     <a href="${verificationUrl}">${verificationUrl}</a>
     <p>This link expires in 24 hours.</p>

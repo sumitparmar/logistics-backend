@@ -99,6 +99,8 @@ const updateProfile = async (req, res, next) => {
       name: req.body.name,
       phone: req.body.phone,
       businessName: req.body.businessName,
+
+      ...(req.body.deliveryMode && { deliveryMode: req.body.deliveryMode }),
     };
 
     const user = await User.findByIdAndUpdate(req.user._id, updates, {
