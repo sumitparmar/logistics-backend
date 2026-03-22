@@ -43,9 +43,23 @@ app.use(requestId);
 // Security
 app.use(helmet());
 
+const allowedOrigins = [
+  "http://localhost:4200",
+  "https://logistics-frontend-y0tk.onrender.com",
+];
+
 const corsOptions = {
-  origin: process.env.FRONTEND_URL || "http://localhost:4200",
-  methods: ["GET", "POST", "PUT", "DELETE"],
+  origin: function (origin, callback) {
+    // allow requests with no origin (like mobile apps / Postman)
+    if (!origin) return callback(null, true);
+
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    } else {
+      return callback(new Error("Not allowed by CORS"));
+    }
+  },
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
   credentials: true,
 };
