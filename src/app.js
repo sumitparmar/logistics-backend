@@ -65,6 +65,7 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
+app.options("*", cors(corsOptions));
 app.use("/api/providers", providerCatalogRoutes);
 app.use(apiLimiter);
 app.use(
