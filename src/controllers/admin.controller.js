@@ -1,8 +1,7 @@
 const healthStore = require("../providers/providerHealth.store");
 const Reconciliation = require("../models/Reconciliation");
 const FailedJob = require("../models/failedJob.model");
-
-// Provider health only
+const User = require("../models/User");
 const getProviderHealth = async (req, res) => {
   return res.json({
     success: true,
@@ -129,6 +128,181 @@ const getProviderPerformance = async (req, res) => {
   });
 };
 
+const getUsers = async (req, res) => {
+  try {
+    const page = Math.max(parseInt(req.query.page) || 1, 1);
+    const limit = Math.min(parseInt(req.query.limit) || 10, 100);
+    const search = req.query.search || "";
+
+    const skip = (page - 1) * limit;
+
+    const filter = search
+      ? {
+          $or: [
+            { name: { $regex: search, $options: "i" } },
+            { email: { $regex: search, $options: "i" } },
+            { phone: { $regex: search, $options: "i" } },
+          ],
+        }
+      : {};
+
+    const [users, total] = await Promise.all([
+      User.find(filter)
+        .select(
+          "name email phone role isActive isEmailVerified isPhoneVerified authProvider lastLoginAt createdAt",
+        )
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+
+      User.countDocuments(filter),
+    ]);
+
+    return res.json({
+      success: true,
+      data: users,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+    });
+  } catch (error) {
+    console.error("getUsers error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch users",
+    });
+  }
+};
+
+const getUserById = async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id).select("-password");
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    return res.json({
+      success: true,
+      data: user,
+    });
+  } catch (error) {
+    console.error("getUserById error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error",
+    });
+  }
+};
+
+const updateUser = async (req, res) => {
+  try {
+    const { name, email, role, isActive } = req.body;
+
+    const updatePayload = {
+      name,
+      email,
+      isActive,
+    };
+
+    if (role) {
+      if (role === "admin" && req.user.role !== "admin") {
+        return res.status(403).json({
+          success: false,
+          message: "Not allowed to assign admin role",
+        });
+      }
+
+      updatePayload.role = role;
+    }
+
+    if (req.user._id.toString() === req.params.id && role && role !== "admin") {
+      return res.status(400).json({
+        success: false,
+        message: "You cannot remove your own admin access",
+      });
+    }
+
+    const user = await User.findByIdAndUpdate(req.params.id, updatePayload, {
+      new: true,
+      runValidators: true,
+    });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    return res.json({
+      success: true,
+      data: user,
+    });
+  } catch (error) {
+    console.error("updateUser error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Update failed",
+    });
+  }
+};
+
+const getOrders = async (req, res) => {
+  try {
+    const page = Math.max(parseInt(req.query.page) || 1, 1);
+    const limit = Math.min(parseInt(req.query.limit) || 10, 100);
+    const search = req.query.search || "";
+
+    const skip = (page - 1) * limit;
+
+    const filter = search
+      ? {
+          $or: [
+            { borzoOrderId: { $regex: search, $options: "i" } },
+            { "customer.name": { $regex: search, $options: "i" } },
+            { "customer.phone": { $regex: search, $options: "i" } },
+          ],
+        }
+      : {};
+
+    const [orders, total] = await Promise.all([
+      Order.find(filter)
+        .select("borzoOrderId customer pricing status provider createdAt")
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+
+      Order.countDocuments(filter),
+    ]);
+
+    return res.json({
+      success: true,
+      data: orders,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+    });
+  } catch (error) {
+    console.error("getOrders error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch orders",
+    });
+  }
+};
+
 module.exports = {
   getProviderHealth,
   getReconciliationIssues,
@@ -140,4 +314,8 @@ module.exports = {
   getCodOutstanding,
   getWalletBalances,
   getProviderPerformance,
+  getUsers,
+  getUserById,
+  updateUser,
+  getOrders,
 };

@@ -36,6 +36,8 @@ router.post(
 );
 router.get("/verify-email", authController.verifyEmailController);
 router.post("/login", authLimiter, validate(loginSchema), authController.login);
+router.post("/forgot-password", authLimiter, authController.forgotPassword);
+router.post("/reset-password", authController.resetPassword);
 router.get("/me", protect, authController.getProfile);
 router.put("/profile", protect, authController.updateProfile);
 router.post("/change-password", protect, authController.changePassword);

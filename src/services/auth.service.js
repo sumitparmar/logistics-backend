@@ -7,8 +7,9 @@ const sendEmail = require("../utils/sendEmail");
 const crypto = require("crypto");
 const redis = require("../config/redis");
 const otpQueue = require("../queues/otp.queue");
+
 const registerUser = async (data) => {
-  const { name, email, phone, password } = data;
+  const { name, email, phone, password, role } = data;
 
   const existingUser = await User.findOne({
     $or: [{ email }, { phone }],
@@ -27,10 +28,11 @@ const registerUser = async (data) => {
     email,
     phone,
     password: hashedPassword,
+    role: role || "user",
     authProvider: "email",
     isEmailVerified: false,
     emailVerificationToken: verificationToken,
-    emailVerificationExpires: Date.now() + 24 * 60 * 60 * 1000, // 24h
+    emailVerificationExpires: Date.now() + 24 * 60 * 60 * 1000,
   });
 
   const verificationUrl = `${process.env.API_BASE_URL}/api/auth/verify-email?token=${verificationToken}`;
@@ -44,7 +46,7 @@ const registerUser = async (data) => {
     <p>This link expires in 24 hours.</p>
   `,
   );
-  return generateToken(user._id);
+  return generateToken(user);
 };
 
 const loginUser = async (data) => {
@@ -67,21 +69,34 @@ const loginUser = async (data) => {
       throw new Error("Please verify your email before logging in.");
     }
 
-    return generateToken(user._id);
+    return generateToken(user);
   }
 
   if (phone && otp) {
-    const result = await verifyOtp(phone, otp);
-    return result.token;
+    await verifyOtp(phone, otp);
+    const user = await User.findOne({ phone });
+
+    return generateToken(user);
   }
 
   throw new Error("Invalid login method");
 };
 
-const generateToken = (userId) => {
-  return jwt.sign({ id: userId }, process.env.JWT_SECRET, {
-    expiresIn: process.env.JWT_EXPIRES_IN,
-  });
+const generateToken = (user) => {
+  const token = jwt.sign(
+    { id: user._id, role: user.role },
+    process.env.JWT_SECRET,
+    { expiresIn: process.env.JWT_EXPIRES_IN },
+  );
+
+  return {
+    token,
+    user: {
+      id: user._id,
+      email: user.email,
+      role: user.role,
+    },
+  };
 };
 
 const sendOtp = async (phone) => {
@@ -159,7 +174,7 @@ const verifyOtp = async (phone, otp) => {
     const attempts = await redis.incr(attemptKey);
 
     if (attempts === 1) {
-      await redis.expire(attemptKey, 300); // expire with OTP
+      await redis.expire(attemptKey, 300);
     }
 
     if (attempts >= 5) {
@@ -170,7 +185,6 @@ const verifyOtp = async (phone, otp) => {
     throw new Error("Invalid OTP");
   }
 
-  // Correct OTP
   await redis.del(otpKey);
   await redis.del(attemptKey);
 
@@ -180,15 +194,12 @@ const verifyOtp = async (phone, otp) => {
     user = await User.create({
       phone,
       authProvider: "otp",
+      role: "user",
     });
   }
 
-  const token = generateToken(user._id);
-
-  return {
-    message: "OTP verified successfully",
-    token,
-  };
+  // ✅ FIX: return same structure as login
+  return generateToken(user);
 };
 
 module.exports = {

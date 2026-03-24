@@ -30,8 +30,12 @@ const protect = async (req, res, next) => {
       });
     }
 
-    req.user = user;
-
+    req.user = {
+      _id: user._id,
+      role: user.role,
+      email: user.email,
+      isActive: user.isActive,
+    };
     next();
   } catch (error) {
     return res.status(401).json({

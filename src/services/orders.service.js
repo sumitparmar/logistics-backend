@@ -189,13 +189,20 @@ const getOrdersService = async (userId, query = {}) => {
 
   const skip = (page - 1) * limit;
 
-  const filter = { user: userId };
+  const filter = {};
+  const isAdmin = String(query.isAdmin) === "true";
 
-  // STATUS FILTER
-  if (query.status) {
-    filter.status = query.status;
+  if (!isAdmin) {
+    filter.user = userId;
   }
 
+  if (query.status) {
+    if (query.status.includes(",")) {
+      filter.status = { $in: query.status.split(",") };
+    } else {
+      filter.status = query.status;
+    }
+  }
   // SEARCH FILTER
   if (query.search) {
     const regex = new RegExp(query.search, "i");
@@ -217,20 +224,18 @@ const getOrdersService = async (userId, query = {}) => {
       .limit(limit)
       .lean(),
 
-    Order.countDocuments({ user: userId }),
-
+    Order.countDocuments(filter),
     Order.countDocuments({
-      user: userId,
+      ...filter,
       status: { $in: ["CREATED", "ASSIGNED", "PICKED_UP", "IN_TRANSIT"] },
     }),
 
     Order.countDocuments({
-      user: userId,
+      ...filter,
       status: "DELIVERED",
     }),
-
     Order.countDocuments({
-      user: userId,
+      ...filter,
       status: "CANCELLED",
     }),
   ]);

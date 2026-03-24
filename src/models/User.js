@@ -58,6 +58,16 @@ const userSchema = new mongoose.Schema(
       select: false,
     },
 
+    resetPasswordToken: {
+      type: String,
+      select: false,
+    },
+
+    resetPasswordExpire: {
+      type: Date,
+      select: false,
+    },
+
     // ACCOUNT STATUS
     isActive: {
       type: Boolean,
