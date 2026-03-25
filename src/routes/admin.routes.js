@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-
+const { getDashboard } = require("../controllers/admin.controller");
 const {
   getUsers,
   getUserById,
@@ -33,7 +33,7 @@ router.get("/analytics/revenue-summary", getRevenueSummary);
 router.get("/analytics/cod-outstanding", getCodOutstanding);
 router.get("/analytics/wallet-balances", getWalletBalances);
 router.get("/analytics/provider-performance", getProviderPerformance);
-
+router.get("/dashboard", getDashboard);
 // users
 router.get("/users", getUsers);
 router.get("/users/:id", getUserById);

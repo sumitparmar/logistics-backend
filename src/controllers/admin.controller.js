@@ -2,6 +2,7 @@ const healthStore = require("../providers/providerHealth.store");
 const Reconciliation = require("../models/Reconciliation");
 const FailedJob = require("../models/failedJob.model");
 const User = require("../models/User");
+
 const getProviderHealth = async (req, res) => {
   return res.json({
     success: true,
@@ -255,6 +256,13 @@ const updateUser = async (req, res) => {
   }
 };
 
+function calculateGrowth(current, previous) {
+  if (previous === 0) {
+    return current === 0 ? 0 : 100;
+  }
+  return ((current - previous) / previous) * 100;
+}
+
 const getOrders = async (req, res) => {
   try {
     const page = Math.max(parseInt(req.query.page) || 1, 1);
@@ -303,6 +311,153 @@ const getOrders = async (req, res) => {
   }
 };
 
+const getDashboard = async (req, res) => {
+  try {
+    const range = req.query.range || "month";
+
+    const now = new Date();
+    let startDate = new Date();
+
+    let prevStartDate = new Date(startDate);
+
+    if (range === "today") {
+      prevStartDate.setDate(prevStartDate.getDate() - 1);
+    } else if (range === "week") {
+      prevStartDate.setDate(prevStartDate.getDate() - 7);
+    } else {
+      prevStartDate.setMonth(prevStartDate.getMonth() - 1);
+    }
+
+    if (range === "today") {
+      startDate.setHours(0, 0, 0, 0);
+    } else if (range === "week") {
+      startDate.setDate(now.getDate() - 7);
+    } else {
+      startDate.setMonth(now.getMonth() - 1);
+    }
+
+    // ---- TOTAL (ALL TIME - keep same as before) ----
+    const [totalUsers, totalOrders, revenueAgg] = await Promise.all([
+      User.countDocuments(),
+      Order.countDocuments(),
+      Order.aggregate([
+        {
+          $group: {
+            _id: null,
+            totalRevenue: { $sum: "$pricing.amount" },
+          },
+        },
+      ]),
+    ]);
+
+    const totalRevenue = revenueAgg[0]?.totalRevenue || 0;
+
+    // ---- FILTERED COUNTS (BASED ON RANGE) ----
+    const usersCount = await User.countDocuments({
+      createdAt: { $gte: startDate },
+    });
+
+    const prevUsersCount = await User.countDocuments({
+      createdAt: {
+        $gte: prevStartDate,
+        $lt: startDate,
+      },
+    });
+
+    const usersChange = calculateGrowth(usersCount, prevUsersCount);
+
+    const ordersCount = await Order.countDocuments({
+      createdAt: { $gte: startDate },
+    });
+
+    const prevOrdersCount = await Order.countDocuments({
+      createdAt: {
+        $gte: prevStartDate,
+        $lt: startDate,
+      },
+    });
+
+    const ordersChange = calculateGrowth(ordersCount, prevOrdersCount);
+
+    const revenueAggFiltered = await Order.aggregate([
+      { $match: { createdAt: { $gte: startDate } } },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: "$pricing.amount" },
+        },
+      },
+    ]);
+
+    const revenueFiltered = revenueAggFiltered[0]?.total || 0;
+
+    const prevRevenueAgg = await Order.aggregate([
+      {
+        $match: {
+          createdAt: { $gte: prevStartDate, $lt: startDate },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: "$pricing.amount" },
+        },
+      },
+    ]);
+
+    const prevRevenue = prevRevenueAgg[0]?.total || 0;
+
+    const revenueChange = calculateGrowth(revenueFiltered, prevRevenue);
+
+    // ---- SALES GRAPH ----
+    const sales = await Order.aggregate([
+      {
+        $match: {
+          createdAt: { $gte: startDate },
+        },
+      },
+      {
+        $group: {
+          _id:
+            range === "today"
+              ? { $hour: "$createdAt" }
+              : { $dayOfMonth: "$createdAt" },
+          total: { $sum: "$pricing.amount" },
+        },
+      },
+      {
+        $sort: { _id: 1 },
+      },
+    ]);
+
+    const formattedSales = sales.map((s) => ({
+      month: s._id.toString(),
+      value: s.total,
+    }));
+
+    // ---- RESPONSE ----
+    return res.json({
+      success: true,
+      data: {
+        totalUsers: usersCount,
+        totalOrders: ordersCount,
+        revenue: revenueFiltered,
+        usersChange: Number(usersChange.toFixed(2)),
+        ordersChange: Number(ordersChange.toFixed(2)),
+        revenueChange: Number(revenueChange.toFixed(2)),
+
+        sales: formattedSales,
+      },
+    });
+  } catch (error) {
+    console.error("getDashboard error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Dashboard fetch failed",
+    });
+  }
+};
+
 module.exports = {
   getProviderHealth,
   getReconciliationIssues,
@@ -318,4 +473,5 @@ module.exports = {
   getUserById,
   updateUser,
   getOrders,
+  getDashboard,
 };
