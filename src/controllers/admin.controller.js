@@ -2,7 +2,7 @@ const healthStore = require("../providers/providerHealth.store");
 const Reconciliation = require("../models/Reconciliation");
 const FailedJob = require("../models/failedJob.model");
 const User = require("../models/User");
-
+const Order = require("../models/Order");
 const getProviderHealth = async (req, res) => {
   return res.json({
     success: true,
@@ -28,7 +28,7 @@ const getWebhookFailures = async (req, res) => {
   return res.json({ success: true, data: [] });
 };
 
-const Order = require("../models/Order");
+// const Order = require("../models/Order");
 const Wallet = require("../models/Wallet");
 
 // ORDERS SUMMARY
@@ -267,40 +267,92 @@ const getOrders = async (req, res) => {
   try {
     const page = Math.max(parseInt(req.query.page) || 1, 1);
     const limit = Math.min(parseInt(req.query.limit) || 10, 100);
-    const search = req.query.search || "";
-
+    const search = (req.query.search || "").trim();
+    const status = req.query.status || "";
     const skip = (page - 1) * limit;
 
-    const filter = search
-      ? {
-          $or: [
-            { borzoOrderId: { $regex: search, $options: "i" } },
-            { "customer.name": { $regex: search, $options: "i" } },
-            { "customer.phone": { $regex: search, $options: "i" } },
-          ],
-        }
-      : {};
+    let filter = {};
 
-    const [orders, total] = await Promise.all([
+    // SEARCH FILTER
+    if (search) {
+      filter.$or = [
+        { borzoOrderId: { $regex: search, $options: "i" } },
+        { "customer.name": { $regex: search, $options: "i" } },
+        { "customer.phone": { $regex: search, $options: "i" } },
+      ];
+    }
+
+    // STATUS FILTER
+    if (status && status !== "ALL") {
+      if (status === "IN_PROGRESS") {
+        filter.status = { $in: ["ASSIGNED", "IN_TRANSIT"] };
+      } else {
+        filter.status = status;
+      }
+    }
+
+    // BASE FILTER (for counts)
+    const baseFilter = {};
+
+    if (search.length > 0) {
+      baseFilter.$or = [
+        { borzoOrderId: { $regex: search, $options: "i" } },
+        { "customer.name": { $regex: search, $options: "i" } },
+        { "customer.phone": { $regex: search, $options: "i" } },
+      ];
+    }
+
+    const [orders, filteredTotal, globalTotal] = await Promise.all([
       Order.find(filter)
-        .select("borzoOrderId customer pricing status provider createdAt")
+        .select("_id borzoOrderId customer pricing status provider createdAt")
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
         .lean(),
 
-      Order.countDocuments(filter),
+      Order.countDocuments(filter), // for table
+      Order.countDocuments({}), // for ALL count (no filter)
     ]);
+
+    const statusAggregation = await Order.aggregate([
+      { $match: baseFilter },
+      {
+        $group: {
+          _id: "$status",
+          count: { $sum: 1 },
+        },
+      },
+    ]);
+
+    const statusCounts = {
+      ALL: globalTotal,
+      CREATED: 0,
+      IN_PROGRESS: 0,
+      DELIVERED: 0,
+      CANCELLED: 0,
+    };
+
+    // map aggregation to UI format
+    statusAggregation.forEach((item) => {
+      if (item._id === "CREATED") statusCounts.CREATED = item.count;
+      if (item._id === "DELIVERED") statusCounts.DELIVERED = item.count;
+      if (item._id === "CANCELLED") statusCounts.CANCELLED = item.count;
+
+      if (item._id === "ASSIGNED" || item._id === "IN_TRANSIT") {
+        statusCounts.IN_PROGRESS += item.count;
+      }
+    });
 
     return res.json({
       success: true,
       data: orders,
       pagination: {
-        total,
+        total: filteredTotal,
         page,
         limit,
-        totalPages: Math.ceil(total / limit),
+        totalPages: Math.ceil(filteredTotal / limit),
       },
+      statusCounts,
     });
   } catch (error) {
     console.error("getOrders error:", error);
@@ -430,11 +482,35 @@ const getDashboard = async (req, res) => {
       },
     ]);
 
-    const formattedSales = sales.map((s) => ({
-      month: s._id.toString(),
-      value: s.total,
-    }));
+    let fullRange = [];
 
+    if (range === "today") {
+      fullRange = Array.from({ length: 24 }, (_, i) => i);
+    } else if (range === "week") {
+      const today = new Date();
+      fullRange = Array.from({ length: 7 }, (_, i) => {
+        const d = new Date(today);
+        d.setDate(today.getDate() - (6 - i));
+        return d.getDate();
+      });
+    } else {
+      const daysInMonth = new Date(
+        now.getFullYear(),
+        now.getMonth() + 1,
+        0,
+      ).getDate();
+
+      fullRange = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+    }
+
+    // convert aggregation to map
+    const salesMap = new Map(sales.map((s) => [Number(s._id), s.total]));
+
+    // fill missing values
+    const formattedSales = fullRange.map((key) => ({
+      label: key.toString(),
+      value: salesMap.get(key) || 0,
+    }));
     // ---- RESPONSE ----
     return res.json({
       success: true,
@@ -458,12 +534,35 @@ const getDashboard = async (req, res) => {
   }
 };
 
+// ADMIN - GET ORDER BY ID
+const getOrderById = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    const order = await Order.findById(id);
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: "Order not found",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: order,
+    });
+  } catch (error) {
+    console.error("ADMIN GET ORDER BY ID ERROR:", error);
+    next(error);
+  }
+};
+
 module.exports = {
   getProviderHealth,
   getReconciliationIssues,
   getFailedJobs,
   getWebhookFailures,
-
   getOrdersSummary,
   getRevenueSummary,
   getCodOutstanding,
@@ -474,4 +573,5 @@ module.exports = {
   updateUser,
   getOrders,
   getDashboard,
+  getOrderById,
 };
