@@ -4,6 +4,24 @@ const router = express.Router();
 const protect = require("../middlewares/auth.middleware");
 const allowRoles = require("../middlewares/role.middleware");
 
+// const {
+//   getDashboard,
+//   getUsers,
+//   getUserById,
+//   updateUser,
+//   getProviderHealth,
+//   getReconciliationIssues,
+//   getFailedJobs,
+//   getWebhookFailures,
+//   getOrdersSummary,
+//   getRevenueSummary,
+//   getCodOutstanding,
+//   getWalletBalances,
+//   getProviderPerformance,
+//   getOrders,
+//   getOrderById,
+// } = require("../controllers/admin.controller");
+
 const {
   getDashboard,
   getUsers,
@@ -20,6 +38,10 @@ const {
   getProviderPerformance,
   getOrders,
   getOrderById,
+  updateOrderStatus,
+  updateOrdersBulkStatus,
+  cancelOrdersBulk,
+  cancelOrder,
 } = require("../controllers/admin.controller");
 
 // =========================
@@ -42,17 +64,17 @@ router.get("/analytics/wallet-balances", getWalletBalances);
 router.get("/analytics/provider-performance", getProviderPerformance);
 router.get("/dashboard", getDashboard);
 
-// =========================
-// USERS
-// =========================
 router.get("/users", getUsers);
 router.get("/users/:id", getUserById);
 router.put("/users/:id", updateUser);
 
-// =========================
-// ORDERS
-// =========================
 router.get("/orders", getOrders);
+
+router.put("/orders/bulk/status", updateOrdersBulkStatus);
+router.put("/orders/bulk/cancel", cancelOrdersBulk);
+
 router.get("/orders/:id", getOrderById);
+router.put("/orders/:id/status", updateOrderStatus);
+router.put("/orders/:id/cancel", cancelOrder);
 
 module.exports = router;

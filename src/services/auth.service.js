@@ -15,8 +15,41 @@ const registerUser = async (data) => {
     $or: [{ email }, { phone }],
   });
 
+  // if (existingUser) {
+  //   throw new Error("User already exists");
+  // }
+
   if (existingUser) {
-    throw new Error("User already exists");
+    if (existingUser.isEmailVerified) {
+      throw new Error("User already exists");
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const verificationToken = crypto.randomBytes(32).toString("hex");
+
+    existingUser.name = name;
+    existingUser.email = email;
+    existingUser.phone = phone;
+    existingUser.password = hashedPassword;
+    existingUser.emailVerificationToken = verificationToken;
+    existingUser.emailVerificationExpires = Date.now() + 24 * 60 * 60 * 1000;
+
+    await existingUser.save();
+
+    const verificationUrl = `${process.env.API_BASE_URL}/api/auth/verify-email?token=${verificationToken}`;
+
+    await sendEmail(
+      existingUser.email,
+      "Verify your email - MoveKart Logistics",
+      `
+    <h3>Welcome to MoveKart Logistics</h3>
+    <p>Please verify your email by clicking the link below:</p>
+    <a href="${verificationUrl}">${verificationUrl}</a>
+    <p>This link expires in 24 hours.</p>
+  `,
+    );
+
+    return generateToken(existingUser);
   }
 
   const hashedPassword = await bcrypt.hash(password, 10);

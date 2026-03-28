@@ -269,6 +269,20 @@ const getOrders = async (req, res) => {
     const limit = Math.min(parseInt(req.query.limit) || 10, 100);
     const search = (req.query.search || "").trim();
     const status = req.query.status || "";
+
+    const sortBy = req.query.sortBy || "createdAt";
+    // const sortOrder = req.query.sortOrder === "asc" ? 1 : -1;
+
+    const allowedSortFields = [
+      "createdAt",
+      "pricing.amount",
+      "status",
+      "borzoOrderId",
+    ];
+
+    const sortField = allowedSortFields.includes(sortBy) ? sortBy : "createdAt";
+
+    const sortDirection = req.query.sortOrder === "asc" ? 1 : -1;
     const skip = (page - 1) * limit;
 
     let filter = {};
@@ -285,7 +299,7 @@ const getOrders = async (req, res) => {
     // STATUS FILTER
     if (status && status !== "ALL") {
       if (status === "IN_PROGRESS") {
-        filter.status = { $in: ["ASSIGNED", "IN_TRANSIT"] };
+        filter.status = { $in: ["ASSIGNED", "PICKED_UP", "IN_TRANSIT"] };
       } else {
         filter.status = status;
       }
@@ -305,7 +319,7 @@ const getOrders = async (req, res) => {
     const [orders, filteredTotal, globalTotal] = await Promise.all([
       Order.find(filter)
         .select("_id borzoOrderId customer pricing status provider createdAt")
-        .sort({ createdAt: -1 })
+        .sort({ [sortField]: sortDirection })
         .skip(skip)
         .limit(limit)
         .lean(),
@@ -338,7 +352,11 @@ const getOrders = async (req, res) => {
       if (item._id === "DELIVERED") statusCounts.DELIVERED = item.count;
       if (item._id === "CANCELLED") statusCounts.CANCELLED = item.count;
 
-      if (item._id === "ASSIGNED" || item._id === "IN_TRANSIT") {
+      if (
+        item._id === "ASSIGNED" ||
+        item._id === "PICKED_UP" ||
+        item._id === "IN_TRANSIT"
+      ) {
         statusCounts.IN_PROGRESS += item.count;
       }
     });
@@ -558,6 +576,181 @@ const getOrderById = async (req, res, next) => {
   }
 };
 
+// const Order = require("../models/order.model");
+
+const updateOrderStatus = async (req, res) => {
+  try {
+    const { status } = req.body;
+    const orderId = req.params.id;
+
+    const order = await Order.findById(orderId);
+
+    if (!order) {
+      return res.status(404).json({ message: "Order not found" });
+    }
+
+    order.status = status;
+
+    if (status === "ASSIGNED") order.assignedAt = new Date();
+    if (status === "PICKED_UP") order.pickedAt = new Date();
+    if (status === "DELIVERED") order.deliveredAt = new Date();
+
+    await order.save();
+
+    res.json({
+      success: true,
+      data: order,
+    });
+  } catch (err) {
+    console.error("UPDATE STATUS ERROR:", err); // ✅ ADD THIS
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+};
+
+const cancelOrder = async (req, res) => {
+  try {
+    const orderId = req.params.id;
+
+    const order = await Order.findById(orderId);
+
+    if (!order) {
+      return res.status(404).json({ message: "Order not found" });
+    }
+
+    order.status = "CANCELLED";
+    order.cancelledAt = new Date();
+
+    await order.save();
+
+    res.json({
+      success: true,
+      data: order,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+const updateOrdersBulkStatus = async (req, res) => {
+  try {
+    const { orderIds, status } = req.body;
+
+    // ✅ VALIDATION
+    if (!orderIds || !orderIds.length) {
+      return res.status(400).json({
+        success: false,
+        message: "No orders provided",
+      });
+    }
+
+    const allowedStatuses = [
+      "CREATED",
+      "ASSIGNED",
+      "PICKED_UP",
+      "IN_TRANSIT",
+      "DELIVERED",
+    ];
+
+    if (!allowedStatuses.includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid status",
+      });
+    }
+
+    // ✅ TIMESTAMP HANDLING
+    let updatePayload = { status };
+
+    if (status === "ASSIGNED") updatePayload.assignedAt = new Date();
+    if (status === "PICKED_UP") updatePayload.pickedAt = new Date();
+    if (status === "DELIVERED") updatePayload.deliveredAt = new Date();
+
+    // ✅ BULK UPDATE
+    const result = await Order.updateMany(
+      {
+        _id: { $in: orderIds },
+        status: { $nin: ["DELIVERED", "CANCELLED"] },
+      },
+      { $set: updatePayload },
+    );
+
+    // ✅ GET SUCCESS / FAILURE SPLIT
+    const updatedOrders = await Order.find({
+      _id: { $in: orderIds },
+      status: status,
+    }).select("_id");
+
+    const updatedIdSet = new Set(updatedOrders.map((o) => o._id.toString()));
+
+    const failedIds = orderIds.filter((id) => !updatedIdSet.has(id.toString()));
+
+    // ✅ FINAL RESPONSE
+    res.json({
+      success: true,
+      totalRequested: orderIds.length,
+      modifiedCount: result.modifiedCount,
+      failedIds,
+    });
+  } catch (error) {
+    console.error("Bulk status update failed", error);
+    res.status(500).json({
+      success: false,
+      message: "Server error",
+    });
+  }
+};
+
+const cancelOrdersBulk = async (req, res) => {
+  try {
+    const { orderIds } = req.body;
+
+    if (!orderIds || !orderIds.length) {
+      return res.status(400).json({
+        success: false,
+        message: "No orders provided",
+      });
+    }
+
+    // ✅ BULK CANCEL WITH TIMESTAMP
+    const result = await Order.updateMany(
+      {
+        _id: { $in: orderIds },
+        status: { $nin: ["DELIVERED", "CANCELLED"] },
+      },
+      {
+        $set: {
+          status: "CANCELLED",
+          cancelledAt: new Date(),
+        },
+      },
+    );
+
+    // ✅ GET SUCCESS / FAILURE SPLIT
+    const updatedOrders = await Order.find({
+      _id: { $in: orderIds },
+      status: "CANCELLED",
+    }).select("_id");
+
+    const updatedIdSet = new Set(updatedOrders.map((o) => o._id.toString()));
+
+    const failedIds = orderIds.filter((id) => !updatedIdSet.has(id.toString()));
+
+    res.json({
+      success: true,
+      totalRequested: orderIds.length,
+      modifiedCount: result.modifiedCount,
+      failedIds,
+    });
+  } catch (error) {
+    console.error("Bulk cancel failed", error);
+    res.status(500).json({
+      success: false,
+      message: "Server error",
+    });
+  }
+};
+
 module.exports = {
   getProviderHealth,
   getReconciliationIssues,
@@ -574,4 +767,8 @@ module.exports = {
   getOrders,
   getDashboard,
   getOrderById,
+  updateOrderStatus,
+  cancelOrder,
+  updateOrdersBulkStatus,
+  cancelOrdersBulk,
 };
