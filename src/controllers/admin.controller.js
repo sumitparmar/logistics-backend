@@ -269,7 +269,7 @@ const getOrders = async (req, res) => {
     const limit = Math.min(parseInt(req.query.limit) || 10, 100);
     const search = (req.query.search || "").trim();
     const status = req.query.status || "";
-
+    const { fromDate, toDate, provider } = req.query;
     const sortBy = req.query.sortBy || "createdAt";
     // const sortOrder = req.query.sortOrder === "asc" ? 1 : -1;
 
@@ -286,6 +286,24 @@ const getOrders = async (req, res) => {
     const skip = (page - 1) * limit;
 
     let filter = {};
+
+    // DATE FILTER (SAFE ADDITION)
+    if (fromDate || toDate) {
+      filter.createdAt = {};
+
+      if (fromDate) {
+        filter.createdAt.$gte = new Date(fromDate);
+      }
+
+      if (toDate) {
+        filter.createdAt.$lte = new Date(toDate);
+      }
+    }
+
+    // PROVIDER FILTER (SAFE ADDITION)
+    if (provider) {
+      filter.provider = provider;
+    }
 
     // SEARCH FILTER
     if (search) {
@@ -329,7 +347,6 @@ const getOrders = async (req, res) => {
     ]);
 
     const statusAggregation = await Order.aggregate([
-      { $match: baseFilter },
       {
         $group: {
           _id: "$status",
@@ -339,14 +356,12 @@ const getOrders = async (req, res) => {
     ]);
 
     const statusCounts = {
-      ALL: globalTotal,
       CREATED: 0,
       IN_PROGRESS: 0,
       DELIVERED: 0,
       CANCELLED: 0,
     };
 
-    // map aggregation to UI format
     statusAggregation.forEach((item) => {
       if (item._id === "CREATED") statusCounts.CREATED = item.count;
       if (item._id === "DELIVERED") statusCounts.DELIVERED = item.count;
@@ -500,6 +515,15 @@ const getDashboard = async (req, res) => {
       },
     ]);
 
+    const statusAggregation = await Order.aggregate([
+      {
+        $group: {
+          _id: "$status",
+          count: { $sum: 1 },
+        },
+      },
+    ]);
+
     let fullRange = [];
 
     if (range === "today") {
@@ -529,6 +553,28 @@ const getDashboard = async (req, res) => {
       label: key.toString(),
       value: salesMap.get(key) || 0,
     }));
+
+    const statusCounts = {
+      CREATED: 0,
+      IN_PROGRESS: 0,
+      DELIVERED: 0,
+      CANCELLED: 0,
+    };
+
+    statusAggregation.forEach((item) => {
+      if (item._id === "CREATED") statusCounts.CREATED = item.count;
+      if (item._id === "DELIVERED") statusCounts.DELIVERED = item.count;
+      if (item._id === "CANCELLED") statusCounts.CANCELLED = item.count;
+
+      if (
+        item._id === "ASSIGNED" ||
+        item._id === "PICKED_UP" ||
+        item._id === "IN_TRANSIT"
+      ) {
+        statusCounts.IN_PROGRESS += item.count;
+      }
+    });
+
     // ---- RESPONSE ----
     return res.json({
       success: true,
@@ -539,8 +585,8 @@ const getDashboard = async (req, res) => {
         usersChange: Number(usersChange.toFixed(2)),
         ordersChange: Number(ordersChange.toFixed(2)),
         revenueChange: Number(revenueChange.toFixed(2)),
-
         sales: formattedSales,
+        statusCounts,
       },
     });
   } catch (error) {
@@ -578,6 +624,37 @@ const getOrderById = async (req, res, next) => {
 
 // const Order = require("../models/order.model");
 
+// const updateOrderStatus = async (req, res) => {
+//   try {
+//     const { status } = req.body;
+//     const orderId = req.params.id;
+
+//     const order = await Order.findById(orderId);
+
+//     if (!order) {
+//       return res.status(404).json({ message: "Order not found" });
+//     }
+
+//     order.status = status;
+
+//     if (status === "ASSIGNED") order.assignedAt = new Date();
+//     if (status === "PICKED_UP") order.pickedAt = new Date();
+//     if (status === "DELIVERED") order.deliveredAt = new Date();
+
+//     await order.save();
+
+//     res.json({
+//       success: true,
+//       data: order,
+//     });
+//   } catch (err) {
+//     console.error("UPDATE STATUS ERROR:", err); // ✅ ADD THIS
+//     res.status(500).json({ message: "Server error", error: err.message });
+//   }
+// };
+
+const { getIO } = require("../config/socket"); // add at top if missing
+
 const updateOrderStatus = async (req, res) => {
   try {
     const { status } = req.body;
@@ -589,20 +666,37 @@ const updateOrderStatus = async (req, res) => {
       return res.status(404).json({ message: "Order not found" });
     }
 
-    order.status = status;
+    const { transitionStatus } = require("../engines/status.engine"); // add at top
 
+    order.status = transitionStatus(order.status, status);
     if (status === "ASSIGNED") order.assignedAt = new Date();
     if (status === "PICKED_UP") order.pickedAt = new Date();
     if (status === "DELIVERED") order.deliveredAt = new Date();
 
-    await order.save();
+    const savedOrder = await order.save();
+
+    // ✅ ADD THIS BLOCK
+    const io = getIO();
+
+    io.to(`user:${savedOrder.user}`).emit("order-status-update", {
+      orderId: savedOrder._id,
+      status: savedOrder.status,
+    });
+
+    io.to("admin").emit("admin-order-update", {
+      orderId: savedOrder._id,
+      status: savedOrder.status,
+      data: savedOrder,
+    });
+
+    // ✅ END
 
     res.json({
       success: true,
-      data: order,
+      data: savedOrder,
     });
   } catch (err) {
-    console.error("UPDATE STATUS ERROR:", err); // ✅ ADD THIS
+    console.error("UPDATE STATUS ERROR:", err);
     res.status(500).json({ message: "Server error", error: err.message });
   }
 };

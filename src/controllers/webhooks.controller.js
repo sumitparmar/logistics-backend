@@ -84,6 +84,12 @@ const borzoWebhook = async (req, res) => {
       status: savedOrder.status,
     });
 
+    io.to("admin").emit("admin-order-update", {
+      orderId: savedOrder._id,
+      status: savedOrder.status,
+      data: savedOrder,
+    });
+
     return res.status(200).json({ received: true });
   } catch (error) {
     console.error("BORZO ORDER WEBHOOK ERROR:", error);
@@ -182,6 +188,12 @@ const borzoDeliveryWebhook = async (req, res) => {
     io.to(`user:${savedOrder.user}`).emit("order-status-update", {
       orderId: savedOrder._id,
       status: savedOrder.status,
+    });
+
+    io.to("admin").emit("admin-order-update", {
+      orderId: savedOrder._id,
+      status: savedOrder.status,
+      data: savedOrder,
     });
 
     return res.status(200).json({ received: true });
