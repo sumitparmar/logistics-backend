@@ -123,6 +123,19 @@ const createOrderService = async (data) => {
   }
 
   const providerStatus = createResponse.order.status;
+
+  const courier = createResponse?.order?.courier;
+
+  let courierData = null;
+
+  if (courier && (courier.name || courier.phone)) {
+    courierData = {
+      courier_id: courier.courier_id || courier.id || null,
+      name: courier.name || null,
+      phone: courier.phone || null,
+    };
+  }
+
   const vehicleTypeFromProvider =
     createResponse.order.vehicle_type_id || validVehicle.id;
   const mappedStatus = mapBorzoStatus(providerStatus);
@@ -133,7 +146,7 @@ const createOrderService = async (data) => {
     customer: data.customer,
     pickup: data.pickup,
     drop: data.drop,
-
+    courier: courierData,
     stops: stops,
     deliveryType: data.deliveryType,
     vehicleTypeId: data.vehicleTypeId,
@@ -173,6 +186,19 @@ const createOrderService = async (data) => {
     orderId: savedOrder._id,
     status: savedOrder.status,
   });
+
+  io.to("admin").emit("order-updated", {
+    orderId: savedOrder._id,
+  });
+
+  setTimeout(async () => {
+    try {
+      await syncOrderService(savedOrder._id);
+      console.log("Auto-sync completed for:", savedOrder._id);
+    } catch (err) {
+      console.error("Auto-sync failed:", err.message);
+    }
+  }, 10000); // 10 sec delay
 
   return savedOrder;
 };
@@ -346,6 +372,17 @@ const syncOrderService = async (id, userId) => {
   }
 
   const borzoOrder = response.orders[0];
+
+  const courier = borzoOrder?.courier;
+
+  if (courier && (courier.name || courier.phone)) {
+    order.courier = {
+      courier_id: courier.courier_id || courier.id || null,
+      name: courier.name || null,
+      phone: courier.phone || null,
+    };
+  }
+
   const backpaymentAmount = Number(borzoOrder.backpayment_amount || 0);
   const codFeeAmount = Number(borzoOrder.cod_fee_amount || 0);
 
@@ -377,8 +414,12 @@ const syncOrderService = async (id, userId) => {
   order.rawProviderResponse = response;
 
   const savedOrder = await order.save();
-
   const io = getIO();
+
+  io.to("admin").emit("order-updated", {
+    orderId: savedOrder._id,
+  });
+
   io.to(`user:${savedOrder.user}`).emit("order-status-update", {
     orderId: savedOrder._id,
     status: savedOrder.status,

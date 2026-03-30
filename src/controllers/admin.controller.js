@@ -137,15 +137,21 @@ const getUsers = async (req, res) => {
 
     const skip = (page - 1) * limit;
 
-    const filter = search
-      ? {
-          $or: [
-            { name: { $regex: search, $options: "i" } },
-            { email: { $regex: search, $options: "i" } },
-            { phone: { $regex: search, $options: "i" } },
-          ],
-        }
-      : {};
+    const filter = {};
+
+    // 🔍 SEARCH
+    if (search) {
+      filter.$or = [
+        { name: { $regex: search, $options: "i" } },
+        { email: { $regex: search, $options: "i" } },
+        { phone: { $regex: search, $options: "i" } },
+      ];
+    }
+
+    // 🔥 ROLE FILTER (THIS IS THE FIX)
+    if (req.query.role) {
+      filter.role = req.query.role;
+    }
 
     const [users, total] = await Promise.all([
       User.find(filter)
@@ -392,6 +398,65 @@ const getOrders = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Failed to fetch orders",
+    });
+  }
+};
+
+const getCouriers = async (req, res) => {
+  try {
+    const page = Math.max(parseInt(req.query.page) || 1, 1);
+    const limit = Math.min(parseInt(req.query.limit) || 10, 100);
+    const skip = (page - 1) * limit;
+
+    // ✅ Only active orders with courier assigned
+    const filter = {
+      status: { $nin: ["DELIVERED", "CANCELLED"] },
+      courier: { $ne: null },
+    };
+
+    const [orders, total] = await Promise.all([
+      Order.find(filter)
+        .select("_id courier status createdAt")
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+
+      Order.countDocuments(filter),
+    ]);
+
+    // 🔁 Transform → unique couriers
+    const couriersMap = new Map();
+
+    orders.forEach((order) => {
+      if (order.courier?.courier_id) {
+        couriersMap.set(order.courier.courier_id, {
+          id: order.courier.courier_id,
+          name: order.courier.name || "N/A",
+          phone: order.courier.phone || "N/A",
+          status: order.status,
+          orderId: order._id,
+        });
+      }
+    });
+
+    const couriers = Array.from(couriersMap.values());
+
+    return res.json({
+      success: true,
+      data: couriers,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+    });
+  } catch (error) {
+    console.error("getCouriers error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch couriers",
     });
   }
 };
@@ -865,4 +930,5 @@ module.exports = {
   cancelOrder,
   updateOrdersBulkStatus,
   cancelOrdersBulk,
+  getCouriers,
 };
