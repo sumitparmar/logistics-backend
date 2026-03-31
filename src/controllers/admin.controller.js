@@ -342,7 +342,9 @@ const getOrders = async (req, res) => {
 
     const [orders, filteredTotal, globalTotal] = await Promise.all([
       Order.find(filter)
-        .select("_id borzoOrderId customer pricing status provider createdAt")
+        .select(
+          "_id borzoOrderId customer pricing status provider createdAt courier",
+        )
         .sort({ [sortField]: sortDirection })
         .skip(skip)
         .limit(limit)
@@ -739,8 +741,8 @@ const updateOrderStatus = async (req, res) => {
     if (status === "DELIVERED") order.deliveredAt = new Date();
 
     const savedOrder = await order.save();
+    console.log("🚀 EMITTING ADMIN EVENT:", savedOrder._id);
 
-    // ✅ ADD THIS BLOCK
     const io = getIO();
 
     io.to(`user:${savedOrder.user}`).emit("order-status-update", {

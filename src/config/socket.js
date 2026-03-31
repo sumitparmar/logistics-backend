@@ -20,9 +20,18 @@ const initSocket = (server) => {
     });
 
     //  ADMIN JOIN
-    socket.on("join-admin", () => {
-      console.log("Admin joined");
+    io.on("connection", (socket) => {
+      console.log("🔌 Socket connected:", socket.id);
+
+      // 🔥 FORCE JOIN — NO FRONTEND DEPENDENCY
       socket.join("admin");
+
+      console.log("✅ ADMIN AUTO-JOIN:", socket.id);
+      console.log("Rooms:", Array.from(socket.rooms));
+
+      socket.on("disconnect", () => {
+        console.log("❌ Socket disconnected:", socket.id);
+      });
     });
 
     socket.on("disconnect", () => {

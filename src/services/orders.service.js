@@ -130,7 +130,7 @@ const createOrderService = async (data) => {
 
   if (courier && (courier.name || courier.phone)) {
     courierData = {
-      courier_id: courier.courier_id || courier.id || null,
+      courierId: courier.courier_id || courier.id || null,
       name: courier.name || null,
       phone: courier.phone || null,
     };
@@ -187,8 +187,9 @@ const createOrderService = async (data) => {
     status: savedOrder.status,
   });
 
-  io.to("admin").emit("order-updated", {
+  io.to("admin").emit("admin-order-update", {
     orderId: savedOrder._id,
+    data: savedOrder,
   });
 
   setTimeout(async () => {
@@ -247,8 +248,7 @@ const getOrdersService = async (userId, query = {}) => {
     Order.find(filter)
       .sort({ [sortBy]: sortOrder })
       .skip(skip)
-      .limit(limit)
-      .lean(),
+      .limit(limit),
 
     Order.countDocuments(filter),
     Order.countDocuments({
@@ -377,7 +377,7 @@ const syncOrderService = async (id, userId) => {
 
   if (courier && (courier.name || courier.phone)) {
     order.courier = {
-      courier_id: courier.courier_id || courier.id || null,
+      courierId: courier.courier_id || courier.id || null,
       name: courier.name || null,
       phone: courier.phone || null,
     };
@@ -416,8 +416,9 @@ const syncOrderService = async (id, userId) => {
   const savedOrder = await order.save();
   const io = getIO();
 
-  io.to("admin").emit("order-updated", {
+  io.to("admin").emit("admin-order-update", {
     orderId: savedOrder._id,
+    data: savedOrder,
   });
 
   io.to(`user:${savedOrder.user}`).emit("order-status-update", {
