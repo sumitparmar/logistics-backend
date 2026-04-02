@@ -4,6 +4,10 @@ const pulseService = require("./pulse.service");
 const { transitionStatus } = require("../engines/status.engine");
 const { mapProviderError } = require("../utils/providerErrorMapper");
 const { mapBorzoStatus } = require("../utils/statusMapper");
+
+const AdminPricing = require("../models/adminPricing.model");
+const { applyAdminPricing } = require("./adminPricing.service");
+
 const {
   mapCreateOrderPayload,
   mapCalculatePayload,
@@ -84,8 +88,9 @@ const createOrderService = async (data) => {
   }
 
   const baseAmount = Number(
-    Number(priceResponse.order.payment_amount).toFixed(2),
+    Number(priceResponse.order.payment_amount || 0).toFixed(2),
   );
+
   const declaredValue = data.package?.declaredValue || 0;
 
   let insuranceCharge = 0;
@@ -94,7 +99,52 @@ const createOrderService = async (data) => {
     insuranceCharge = Math.round(2 + declaredValue * 0.01);
   }
 
-  const finalAmount = Number((baseAmount + insuranceCharge).toFixed(2));
+  let pricingConfig = await AdminPricing.findOne({ isActive: true });
+
+  if (!pricingConfig) {
+    pricingConfig = {
+      marginPercent: 0,
+      baseFees: { platformFee: 0, handlingFee: 0 },
+      surge: { enabled: false },
+      vehicleOverrides: [],
+    };
+  }
+  // Step 1: apply admin pricing on base
+  let adjustedAmount = baseAmount;
+
+  if (pricingConfig && baseAmount > 0) {
+    adjustedAmount = applyAdminPricing({
+      basePrice: baseAmount,
+      config: pricingConfig,
+      vehicleType: String(data.vehicleTypeId),
+    });
+  }
+
+  // Step 2: add insurance AFTER pricing
+  const finalAmount = Number((adjustedAmount + insuranceCharge).toFixed(2));
+
+  const snapshot = {
+    basePrice: baseAmount,
+
+    marginPercent: pricingConfig.marginPercent,
+
+    platformFee: pricingConfig.baseFees?.platformFee || 0,
+    handlingFee: pricingConfig.baseFees?.handlingFee || 0,
+
+    surgeMultiplier: pricingConfig.surge?.multiplier || 1,
+    surgeApplied: pricingConfig.surge?.enabled || false,
+
+    vehicleType: String(data.vehicleTypeId),
+    vehicleMultiplier:
+      pricingConfig.vehicleOverrides?.find(
+        (v) => v.type === String(data.vehicleTypeId),
+      )?.multiplier || 1,
+
+    insurancePercent: pricingConfig.extras?.insurancePercent || 0,
+    codFee: pricingConfig.extras?.codFee || 0,
+
+    finalPrice: finalAmount,
+  };
   let createPayload;
 
   // END-OF-DAY FLOW
@@ -141,6 +191,7 @@ const createOrderService = async (data) => {
   const mappedStatus = mapBorzoStatus(providerStatus);
 
   const order = new Order({
+    pricingSnapshot: snapshot,
     borzoOrderId: String(createResponse.order.order_id),
 
     customer: data.customer,
@@ -157,15 +208,14 @@ const createOrderService = async (data) => {
     vehicle: {
       type: vehicleTypeFromProvider,
     },
-
     pricing: {
       baseAmount,
+      adjustedAmount,
       insurance: insuranceCharge,
       amount: finalAmount,
       currency: process.env.CURRENCY,
-      calculatedAt: new Date(), // 🔥 add this
+      calculatedAt: new Date(),
     },
-
     cod: {
       enabled: Boolean(data.cod?.amount),
       amount: data.cod?.amount ? Number(data.cod.amount) : 0,
@@ -436,22 +486,32 @@ const calculateOrderService = async (data) => {
 
   const response = await pulseService.calculateOrder(payload);
 
-  let amount = Number(response.order.payment_amount);
+  const baseAmount = Number(response.order.payment_amount || 0);
 
-  if (data.deliveryType === "NOW") {
-    amount = Math.round(amount * 1.2);
+  // Get pricing config
+  let pricingConfig = await AdminPricing.findOne({ isActive: true });
+
+  if (!pricingConfig) {
+    pricingConfig = {
+      marginPercent: 0,
+      baseFees: { platformFee: 0, handlingFee: 0 },
+      surge: { enabled: false },
+      vehicleOverrides: [],
+    };
   }
+  // Apply admin pricing
+  let adjustedAmount = baseAmount;
 
-  if (data.deliveryType === "EOD") {
-    amount = Math.round(amount * 1.0);
-  }
-
-  if (data.deliveryType === "SCHEDULED") {
-    amount = Math.round(amount * 0.9);
+  if (pricingConfig && baseAmount > 0) {
+    adjustedAmount = applyAdminPricing({
+      basePrice: baseAmount,
+      config: pricingConfig,
+      vehicleType: String(data.vehicleTypeId || data.vehicleType || ""),
+    });
   }
 
   return {
-    amount,
+    amount: adjustedAmount,
     currency: process.env.CURRENCY,
   };
 };

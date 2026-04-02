@@ -343,7 +343,7 @@ const getOrders = async (req, res) => {
     const [orders, filteredTotal, globalTotal] = await Promise.all([
       Order.find(filter)
         .select(
-          "_id borzoOrderId customer pricing status provider createdAt courier",
+          "_id borzoOrderId customer pricing status provider createdAt courier pickup drop",
         )
         .sort({ [sortField]: sortDirection })
         .skip(skip)
