@@ -1,9 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const {
-  getAdminPricingAnalytics,
-} = require("../controllers/adminPricingAnalytics.controller");
-
+const { getPricingAnalytics } = require("../controllers/analytics.controller");
 const protect = require("../middlewares/auth.middleware");
 const allowRoles = require("../middlewares/role.middleware");
 const {
@@ -70,5 +67,5 @@ router.put("/orders/:id/cancel", cancelOrder);
 
 router.get("/pricing", getAdminPricing);
 router.post("/pricing", updateAdminPricing);
-router.get("/analytics", getAdminPricingAnalytics);
+router.get("/pricing/analytics", getPricingAnalytics);
 module.exports = router;

@@ -4,6 +4,7 @@ const {
   getProviderBreakdownService,
   getVehicleBreakdownService,
   getRevenueSummaryService,
+  getPricingAnalyticsService,
 } = require("../services/analytics.service");
 
 const { sendSuccess } = require("../utils/response");
@@ -56,10 +57,23 @@ const getVehicleBreakdown = async (req, res, next) => {
   }
 };
 
+const getPricingAnalytics = async (req, res, next) => {
+  try {
+    const range = req.query.range || "today";
+
+    const data = await getPricingAnalyticsService(range);
+
+    return sendSuccess(res, data, "Pricing analytics fetched");
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
   getOrderSummary,
   getDailyOrders,
   getRevenueSummary,
   getProviderBreakdown,
   getVehicleBreakdown,
+  getPricingAnalytics,
 };
