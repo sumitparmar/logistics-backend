@@ -16,10 +16,8 @@ const registerUser = async (data) => {
   });
 
   if (existingUser) {
-    if (existingUser.isDeleted) {
-      existingUser.isDeleted = false;
-      existingUser.deletedAt = null;
-      existingUser.isActive = true;
+    if (!existingUser.isActive) {
+      throw new Error("Account exists but is deactivated. Contact support.");
     }
 
     if (existingUser.isEmailVerified) {
@@ -95,13 +93,10 @@ const loginUser = async (data) => {
     }
 
     //  SAFE REVIVE LOGIC (no break)
-    if (user.isDeleted) {
-      user.isDeleted = false;
-      user.deletedAt = null;
-      user.isActive = true;
-
-      await user.save();
+    if (!user.isActive) {
+      throw new Error("Your account has been deactivated. Contact support.");
     }
+
     if (!user) {
       throw new Error("Invalid credentials");
     }
@@ -120,10 +115,7 @@ const loginUser = async (data) => {
   }
 
   if (phone && otp) {
-    await verifyOtp(phone, otp);
-    const user = await User.findOne({ phone });
-
-    return generateToken(user);
+    return await verifyOtp(phone, otp);
   }
 
   throw new Error("Invalid login method");
@@ -238,12 +230,8 @@ const verifyOtp = async (phone, otp) => {
   let user = await User.findOne({ phone });
 
   // 🔥 SAFE REVIVE LOGIC
-  if (user && user.isDeleted) {
-    user.isDeleted = false;
-    user.deletedAt = null;
-    user.isActive = true;
-
-    await user.save();
+  if (user && !user.isActive) {
+    throw new Error("Your account has been deactivated. Contact support.");
   }
 
   if (!user) {

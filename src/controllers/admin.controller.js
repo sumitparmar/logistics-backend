@@ -141,9 +141,7 @@ const getUsers = async (req, res) => {
 
     const skip = (page - 1) * limit;
 
-    const filter = {
-      isDeleted: { $ne: true },
-    };
+    const filter = {};
 
     if (search) {
       filter.$or = [
@@ -498,8 +496,9 @@ const getDashboard = async (req, res) => {
     // ---- TOTAL (ALL TIME - keep same as before) ----
     const [totalUsers, totalOrders, revenueAgg] = await Promise.all([
       User.countDocuments({
-        isDeleted: { $ne: true },
+        isActive: true,
       }),
+
       Order.countDocuments(),
       Order.aggregate([
         {
@@ -516,7 +515,7 @@ const getDashboard = async (req, res) => {
     // ---- FILTERED COUNTS (BASED ON RANGE) ----
     const usersCount = await User.countDocuments({
       createdAt: { $gte: startDate },
-      isDeleted: { $ne: true },
+      isActive: true,
     });
 
     const prevUsersCount = await User.countDocuments({
@@ -524,7 +523,7 @@ const getDashboard = async (req, res) => {
         $gte: prevStartDate,
         $lt: startDate,
       },
-      isDeleted: { $ne: true },
+      isActive: true,
     });
 
     const usersChange = calculateGrowth(usersCount, prevUsersCount);
@@ -669,7 +668,7 @@ const getDashboard = async (req, res) => {
     return res.json({
       success: true,
       data: {
-        totalUsers: usersCount,
+        totalUsers: totalUsers,
         totalOrders: ordersCount,
         revenue: revenueFiltered,
         usersChange: Number(usersChange.toFixed(2)),
@@ -994,8 +993,7 @@ const deleteUser = async (req, res) => {
     const user = await User.findByIdAndUpdate(
       userId,
       {
-        isDeleted: true,
-        deletedAt: new Date(),
+        isActive: false,
       },
       { new: true },
     );
@@ -1006,6 +1004,9 @@ const deleteUser = async (req, res) => {
         message: "User not found",
       });
     }
+
+    const io = getIO();
+    io.to("admin").emit("admin-user-update");
 
     return res.json({
       success: true,
