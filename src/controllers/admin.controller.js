@@ -3,6 +3,10 @@ const Reconciliation = require("../models/Reconciliation");
 const FailedJob = require("../models/failedJob.model");
 const User = require("../models/User");
 const Order = require("../models/Order");
+const {
+  createAdminNotification,
+} = require("../services/adminNotification.service");
+
 const getProviderHealth = async (req, res) => {
   return res.json({
     success: true,
@@ -137,9 +141,10 @@ const getUsers = async (req, res) => {
 
     const skip = (page - 1) * limit;
 
-    const filter = {};
+    const filter = {
+      isDeleted: { $ne: true },
+    };
 
-    // 🔍 SEARCH
     if (search) {
       filter.$or = [
         { name: { $regex: search, $options: "i" } },
@@ -492,7 +497,9 @@ const getDashboard = async (req, res) => {
 
     // ---- TOTAL (ALL TIME - keep same as before) ----
     const [totalUsers, totalOrders, revenueAgg] = await Promise.all([
-      User.countDocuments(),
+      User.countDocuments({
+        isDeleted: { $ne: true },
+      }),
       Order.countDocuments(),
       Order.aggregate([
         {
@@ -509,6 +516,7 @@ const getDashboard = async (req, res) => {
     // ---- FILTERED COUNTS (BASED ON RANGE) ----
     const usersCount = await User.countDocuments({
       createdAt: { $gte: startDate },
+      isDeleted: { $ne: true },
     });
 
     const prevUsersCount = await User.countDocuments({
@@ -516,6 +524,7 @@ const getDashboard = async (req, res) => {
         $gte: prevStartDate,
         $lt: startDate,
       },
+      isDeleted: { $ne: true },
     });
 
     const usersChange = calculateGrowth(usersCount, prevUsersCount);
@@ -752,10 +761,29 @@ const updateOrderStatus = async (req, res) => {
     order.status = transitionStatus(order.status, status);
     if (status === "ASSIGNED") order.assignedAt = new Date();
     if (status === "PICKED_UP") order.pickedAt = new Date();
+    console.log("👉 Incoming status:", status);
+    console.log("👉 Existing deliveredAt:", order.deliveredAt);
+    let isNewlyDelivered = false;
+
     if (status === "DELIVERED" && !order.deliveredAt) {
       order.deliveredAt = new Date();
+      isNewlyDelivered = true;
     }
+
     const savedOrder = await order.save();
+
+    if (isNewlyDelivered) {
+      console.log("🔥 Notification Triggered for:", savedOrder._id);
+
+      await createAdminNotification({
+        type: "ORDER",
+        title: "Order Delivered",
+        message: `Order ${savedOrder._id} delivered successfully`,
+        meta: { orderId: savedOrder._id },
+        priority: "LOW",
+      });
+    }
+
     console.log("🚀 EMITTING ADMIN EVENT:", savedOrder._id);
 
     const io = getIO();
@@ -959,6 +987,39 @@ const exportCSV = async (req, res) => {
   }
 };
 
+const deleteUser = async (req, res) => {
+  try {
+    const userId = req.params.id;
+
+    const user = await User.findByIdAndUpdate(
+      userId,
+      {
+        isDeleted: true,
+        deletedAt: new Date(),
+      },
+      { new: true },
+    );
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    return res.json({
+      success: true,
+      message: "User deleted successfully",
+    });
+  } catch (error) {
+    console.error("deleteUser error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Delete failed",
+    });
+  }
+};
+
 module.exports = {
   getProviderHealth,
   getReconciliationIssues,
@@ -981,4 +1042,5 @@ module.exports = {
   cancelOrdersBulk,
   getCouriers,
   exportCSV,
+  deleteUser,
 };

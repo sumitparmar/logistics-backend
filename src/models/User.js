@@ -74,6 +74,16 @@ const userSchema = new mongoose.Schema(
       default: true,
     },
 
+    isDeleted: {
+      type: Boolean,
+      default: false,
+    },
+
+    deletedAt: {
+      type: Date,
+      default: null,
+    },
+
     // ROLE MANAGEMENT
     role: {
       type: String,

@@ -15,11 +15,13 @@ const registerUser = async (data) => {
     $or: [{ email }, { phone }],
   });
 
-  // if (existingUser) {
-  //   throw new Error("User already exists");
-  // }
-
   if (existingUser) {
+    if (existingUser.isDeleted) {
+      existingUser.isDeleted = false;
+      existingUser.deletedAt = null;
+      existingUser.isActive = true;
+    }
+
     if (existingUser.isEmailVerified) {
       throw new Error("User already exists");
     }
@@ -86,8 +88,20 @@ const loginUser = async (data) => {
   const { email, password, phone, otp } = data;
 
   if (email && password) {
-    const user = await User.findOne({ email }).select("+password");
+    let user = await User.findOne({ email }).select("+password");
 
+    if (!user) {
+      throw new Error("Invalid credentials");
+    }
+
+    //  SAFE REVIVE LOGIC (no break)
+    if (user.isDeleted) {
+      user.isDeleted = false;
+      user.deletedAt = null;
+      user.isActive = true;
+
+      await user.save();
+    }
     if (!user) {
       throw new Error("Invalid credentials");
     }
@@ -223,6 +237,15 @@ const verifyOtp = async (phone, otp) => {
 
   let user = await User.findOne({ phone });
 
+  // 🔥 SAFE REVIVE LOGIC
+  if (user && user.isDeleted) {
+    user.isDeleted = false;
+    user.deletedAt = null;
+    user.isActive = true;
+
+    await user.save();
+  }
+
   if (!user) {
     user = await User.create({
       phone,
@@ -231,7 +254,7 @@ const verifyOtp = async (phone, otp) => {
     });
   }
 
-  // ✅ FIX: return same structure as login
+  //  FIX: return same structure as login
   return generateToken(user);
 };
 

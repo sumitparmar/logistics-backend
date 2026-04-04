@@ -4,6 +4,11 @@ const { getPricingAnalytics } = require("../controllers/analytics.controller");
 const protect = require("../middlewares/auth.middleware");
 const allowRoles = require("../middlewares/role.middleware");
 const { exportCSV } = require("../controllers/admin.controller");
+const {
+  fetchAdminNotifications,
+  markAdminNotificationAsRead,
+  createTestNotification, // 👈 ADD THIS
+} = require("../controllers/adminNotification.controller");
 
 const {
   getAdminPricing,
@@ -31,6 +36,7 @@ const {
   cancelOrdersBulk,
   cancelOrder,
   getCouriers,
+  deleteUser,
 } = require("../controllers/admin.controller");
 
 // =========================
@@ -56,6 +62,7 @@ router.get("/dashboard", getDashboard);
 router.get("/users", getUsers);
 router.get("/users/:id", getUserById);
 router.put("/users/:id", updateUser);
+router.delete("/users/:id", deleteUser);
 
 router.get("/orders", getOrders);
 router.get("/couriers", getCouriers);
@@ -72,4 +79,9 @@ router.post("/pricing", updateAdminPricing);
 router.get("/pricing/analytics", getPricingAnalytics);
 router.get("/export", exportCSV);
 
+//Notification
+
+router.get("/notifications", fetchAdminNotifications);
+router.patch("/notifications/:id/read", markAdminNotificationAsRead);
+router.post("/notifications/test", createTestNotification);
 module.exports = router;
