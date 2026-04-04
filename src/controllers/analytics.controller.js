@@ -59,8 +59,7 @@ const getVehicleBreakdown = async (req, res, next) => {
 
 const getPricingAnalytics = async (req, res, next) => {
   try {
-    const range = req.query.range || "today";
-
+    const range = req.query.range || "month";
     const data = await getPricingAnalyticsService(range);
 
     return sendSuccess(res, data, "Pricing analytics fetched");

@@ -5,11 +5,14 @@ const redis = new Redis({
   port: process.env.REDIS_PORT,
   password: process.env.REDIS_PASSWORD || undefined,
 
+  keyPrefix: "movekart:",
+  connectTimeout: 10000,
+
   maxRetriesPerRequest: null,
   enableReadyCheck: true,
+
   retryStrategy: (times) => {
-    const delay = Math.min(times * 50, 2000);
-    return delay;
+    return Math.min(times * 50, 2000);
   },
 });
 

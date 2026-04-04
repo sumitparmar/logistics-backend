@@ -3,6 +3,8 @@ const router = express.Router();
 const { getPricingAnalytics } = require("../controllers/analytics.controller");
 const protect = require("../middlewares/auth.middleware");
 const allowRoles = require("../middlewares/role.middleware");
+const { exportCSV } = require("../controllers/admin.controller");
+
 const {
   getAdminPricing,
   updateAdminPricing,
@@ -68,4 +70,6 @@ router.put("/orders/:id/cancel", cancelOrder);
 router.get("/pricing", getAdminPricing);
 router.post("/pricing", updateAdminPricing);
 router.get("/pricing/analytics", getPricingAnalytics);
+router.get("/export", exportCSV);
+
 module.exports = router;

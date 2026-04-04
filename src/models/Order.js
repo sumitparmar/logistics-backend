@@ -157,6 +157,11 @@ const orderSchema = new mongoose.Schema(
       default: "CREATED",
     },
 
+    deliveredAt: {
+      type: Date,
+      index: true,
+    },
+
     statusHistory: [
       {
         status: {
@@ -204,6 +209,8 @@ orderSchema.index({ user: 1, createdAt: -1 });
 orderSchema.index({ user: 1, status: 1 });
 
 orderSchema.index({ status: 1, createdAt: 1 });
+
+orderSchema.index({ status: 1, deliveredAt: 1 });
 
 orderSchema.index({ status: 1, "vehicle.type": 1 });
 

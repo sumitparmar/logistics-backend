@@ -477,6 +477,7 @@ const getDashboard = async (req, res) => {
     } else if (range === "week") {
       prevStartDate.setDate(prevStartDate.getDate() - 7);
     } else {
+      prevStartDate = new Date(startDate);
       prevStartDate.setMonth(prevStartDate.getMonth() - 1);
     }
 
@@ -485,7 +486,8 @@ const getDashboard = async (req, res) => {
     } else if (range === "week") {
       startDate.setDate(now.getDate() - 7);
     } else {
-      startDate.setMonth(now.getMonth() - 1);
+      startDate = new Date();
+      startDate.setMonth(startDate.getMonth() - 1);
     }
 
     // ---- TOTAL (ALL TIME - keep same as before) ----
@@ -532,7 +534,12 @@ const getDashboard = async (req, res) => {
     const ordersChange = calculateGrowth(ordersCount, prevOrdersCount);
 
     const revenueAggFiltered = await Order.aggregate([
-      { $match: { createdAt: { $gte: startDate } } },
+      {
+        $match: {
+          status: "DELIVERED",
+          createdAt: { $gte: startDate },
+        },
+      },
       {
         $group: {
           _id: null,
@@ -546,6 +553,7 @@ const getDashboard = async (req, res) => {
     const prevRevenueAgg = await Order.aggregate([
       {
         $match: {
+          status: "DELIVERED",
           createdAt: { $gte: prevStartDate, $lt: startDate },
         },
       },
@@ -565,6 +573,7 @@ const getDashboard = async (req, res) => {
     const sales = await Order.aggregate([
       {
         $match: {
+          status: "DELIVERED",
           createdAt: { $gte: startDate },
         },
       },
@@ -574,6 +583,7 @@ const getDashboard = async (req, res) => {
             range === "today"
               ? { $hour: "$createdAt" }
               : { $dayOfMonth: "$createdAt" },
+
           total: { $sum: "$pricing.amount" },
         },
       },
@@ -613,8 +623,12 @@ const getDashboard = async (req, res) => {
     }
 
     // convert aggregation to map
-    const salesMap = new Map(sales.map((s) => [Number(s._id), s.total]));
-
+    const salesMap = new Map(
+      sales.map((s) => [
+        typeof s._id === "object" ? s._id.day || s._id.hour : s._id,
+        s.total,
+      ]),
+    );
     // fill missing values
     const formattedSales = fullRange.map((key) => ({
       label: key.toString(),
@@ -738,8 +752,9 @@ const updateOrderStatus = async (req, res) => {
     order.status = transitionStatus(order.status, status);
     if (status === "ASSIGNED") order.assignedAt = new Date();
     if (status === "PICKED_UP") order.pickedAt = new Date();
-    if (status === "DELIVERED") order.deliveredAt = new Date();
-
+    if (status === "DELIVERED" && !order.deliveredAt) {
+      order.deliveredAt = new Date();
+    }
     const savedOrder = await order.save();
     console.log("🚀 EMITTING ADMIN EVENT:", savedOrder._id);
 
@@ -797,7 +812,7 @@ const updateOrdersBulkStatus = async (req, res) => {
   try {
     const { orderIds, status } = req.body;
 
-    // ✅ VALIDATION
+    // VALIDATION
     if (!orderIds || !orderIds.length) {
       return res.status(400).json({
         success: false,
@@ -820,14 +835,15 @@ const updateOrdersBulkStatus = async (req, res) => {
       });
     }
 
-    // ✅ TIMESTAMP HANDLING
+    //  TIMESTAMP HANDLING
     let updatePayload = { status };
 
     if (status === "ASSIGNED") updatePayload.assignedAt = new Date();
     if (status === "PICKED_UP") updatePayload.pickedAt = new Date();
-    if (status === "DELIVERED") updatePayload.deliveredAt = new Date();
-
-    // ✅ BULK UPDATE
+    if (status === "DELIVERED") {
+      updatePayload.deliveredAt = new Date();
+    }
+    //  BULK UPDATE
     const result = await Order.updateMany(
       {
         _id: { $in: orderIds },
@@ -836,7 +852,7 @@ const updateOrdersBulkStatus = async (req, res) => {
       { $set: updatePayload },
     );
 
-    // ✅ GET SUCCESS / FAILURE SPLIT
+    //  GET SUCCESS / FAILURE SPLIT
     const updatedOrders = await Order.find({
       _id: { $in: orderIds },
       status: status,
@@ -846,7 +862,7 @@ const updateOrdersBulkStatus = async (req, res) => {
 
     const failedIds = orderIds.filter((id) => !updatedIdSet.has(id.toString()));
 
-    // ✅ FINAL RESPONSE
+    //  FINAL RESPONSE
     res.json({
       success: true,
       totalRequested: orderIds.length,
@@ -912,6 +928,37 @@ const cancelOrdersBulk = async (req, res) => {
   }
 };
 
+const { Parser } = require("json2csv");
+
+const exportCSV = async (req, res) => {
+  try {
+    const orders = await Order.find().lean();
+
+    const rows = orders.map((o) => ({
+      Order_ID: o.borzoOrderId || "",
+      Customer: o.customer?.name || "",
+      Amount: o.pricing?.amount || 0,
+      Status: o.status,
+      Created_At: o.createdAt,
+      Delivered_At: o.deliveredAt || "",
+    }));
+
+    const parser = new Parser();
+    const csv = parser.parse(rows);
+
+    res.header("Content-Type", "text/csv");
+    res.attachment(`orders-${Date.now()}.csv`);
+
+    return res.send(csv);
+  } catch (err) {
+    console.error("CSV export error:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Export failed",
+    });
+  }
+};
+
 module.exports = {
   getProviderHealth,
   getReconciliationIssues,
@@ -933,4 +980,5 @@ module.exports = {
   updateOrdersBulkStatus,
   cancelOrdersBulk,
   getCouriers,
+  exportCSV,
 };

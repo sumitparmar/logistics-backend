@@ -31,6 +31,9 @@ const getOrderSummaryService = async () => {
   };
 };
 
+/**
+ * DAILY ORDERS GRAPH
+ */
 const getDailyOrdersService = async (userId, days = 14) => {
   const fromDate = new Date();
   fromDate.setDate(fromDate.getDate() - days);
@@ -155,11 +158,13 @@ const getPricingAnalyticsService = async (range = "today") => {
     startDate = new Date();
     startDate.setMonth(startDate.getMonth() - 1);
   }
+
   const matchStage = {
+    deliveredAt: { $gte: startDate },
     status: "DELIVERED",
-    createdAt: { $gte: startDate },
   };
 
+  //  TOTALS
   const summary = await Order.aggregate([
     { $match: matchStage },
     {
@@ -172,6 +177,7 @@ const getPricingAnalyticsService = async (range = "today") => {
     },
   ]);
 
+  // 🔹 VEHICLE BREAKDOWN (REVENUE BASED)
   const vehicleBreakdown = await Order.aggregate([
     {
       $match: {
@@ -188,66 +194,67 @@ const getPricingAnalyticsService = async (range = "today") => {
     {
       $project: {
         _id: 0,
-        type: {
-          $switch: {
-            branches: [
-              { case: { $eq: ["$_id", "1"] }, then: "Bike" },
-              { case: { $eq: ["$_id", "2"] }, then: "Car" },
-              { case: { $eq: ["$_id", "3"] }, then: "Van" },
-              { case: { $eq: ["$_id", "8"] }, then: "Auto" },
-            ],
-            default: { $toString: "$_id" },
-          },
-        },
+        type: { $toString: "$_id" },
         revenue: 1,
       },
     },
   ]);
 
-  // 🔹 REVENUE TREND (DAILY - IST, NO GAPS)
+  // 🔹 REVENUE TREND (TIME SERIES)
+  let revenueTrend = [];
 
-  const trendRaw = await Order.aggregate([
-    { $match: matchStage },
-    {
-      $group: {
-        _id: {
-          $dateToString: {
-            format: "%Y-%m-%d",
-            date: "$createdAt",
-            timezone: "Asia/Kolkata",
-          },
+  if (range === "today") {
+    const hourly = await Order.aggregate([
+      { $match: matchStage },
+      {
+        $group: {
+          _id: { hour: { $hour: "$deliveredAt" } },
+          revenue: { $sum: "$pricing.amount" },
         },
-        revenue: { $sum: "$pricing.amount" },
       },
-    },
-    { $sort: { _id: 1 } },
-  ]);
+      { $sort: { "_id.hour": 1 } },
+      {
+        $project: {
+          _id: 0,
+          label: {
+            $concat: [{ $toString: "$_id.hour" }, ":00"],
+          },
+          revenue: 1,
+        },
+      },
+    ]);
 
-  // ---- GAP FILLING ----
+    revenueTrend = hourly;
+  } else {
+    const daily = await Order.aggregate([
+      { $match: matchStage },
+      {
+        $group: {
+          _id: {
+            day: { $dayOfMonth: "$deliveredAt" },
+            month: { $month: "$deliveredAt" },
+          },
+          revenue: { $sum: "$pricing.amount" },
+        },
+      },
+      { $sort: { "_id.month": 1, "_id.day": 1 } },
+      {
+        $project: {
+          _id: 0,
+          label: {
+            $concat: [
+              { $toString: "$_id.day" },
+              "/",
+              { $toString: "$_id.month" },
+            ],
+          },
+          revenue: 1,
+        },
+      },
+    ]);
 
-  const trendMap = {};
-  trendRaw.forEach((item) => {
-    trendMap[item._id] = item.revenue;
-  });
-
-  const revenueTrend = [];
-
-  const end = new Date();
-  const start = new Date(startDate);
-
-  while (start <= end) {
-    const dateStr = start.toLocaleDateString("en-CA", {
-      timeZone: "Asia/Kolkata",
-    });
-
-    revenueTrend.push({
-      label: dateStr,
-      revenue: trendMap[dateStr] || 0,
-    });
-
-    start.setDate(start.getDate() + 1);
+    revenueTrend = daily;
   }
-
   const base = summary[0] || {
     totalOrders: 0,
     totalRevenue: 0,
