@@ -231,30 +231,59 @@ const getPricingAnalyticsService = async (range = "today") => {
       {
         $group: {
           _id: {
-            day: { $dayOfMonth: "$deliveredAt" },
-            month: { $month: "$deliveredAt" },
+            date: {
+              $dateToString: {
+                format: "%Y-%m-%d",
+                date: "$deliveredAt",
+              },
+            },
           },
           revenue: { $sum: "$pricing.amount" },
         },
       },
-      { $sort: { "_id.month": 1, "_id.day": 1 } },
+      { $sort: { "_id.date": 1 } },
       {
         $project: {
           _id: 0,
           label: {
-            $concat: [
-              { $toString: "$_id.day" },
-              "/",
-              { $toString: "$_id.month" },
-            ],
+            $dateToString: {
+              format: "%d %b",
+              date: {
+                $dateFromString: {
+                  dateString: "$_id.date",
+                },
+              },
+            },
           },
           revenue: 1,
         },
       },
     ]);
 
-    revenueTrend = daily;
+    const map = new Map(daily.map((d) => [d.label, d.revenue]));
+
+    const result = [];
+
+    const current = new Date(startDate);
+    const end = new Date();
+
+    while (current <= end) {
+      const label = current.toLocaleDateString("en-GB", {
+        day: "2-digit",
+        month: "short",
+      });
+
+      result.push({
+        label,
+        revenue: map.get(label) || 0,
+      });
+
+      current.setDate(current.getDate() + 1);
+    }
+
+    revenueTrend = result;
   }
+
   const base = summary[0] || {
     totalOrders: 0,
     totalRevenue: 0,
