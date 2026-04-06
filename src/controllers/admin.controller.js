@@ -143,6 +143,16 @@ const getUsers = async (req, res) => {
 
     const filter = {};
 
+    const status = req.query.status;
+
+    if (status === "active") {
+      filter.isActive = true;
+    }
+
+    if (status === "inactive") {
+      filter.isActive = false;
+    }
+
     if (search) {
       filter.$or = [
         { name: { $regex: search, $options: "i" } },
