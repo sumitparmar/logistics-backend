@@ -158,11 +158,68 @@ const mapCreateOrderPayload = (data) => {
   return payload;
 };
 
-const mapEditPayload = (borzoOrderId, data) => {
-  return {
+// const mapEditPayload = (borzoOrderId, data) => {
+//   return {
+//     order_id: Number(borzoOrderId),
+//     ...data,
+//   };
+// };
+
+const mapEditPayload = (borzoOrderId, data, existingOrder) => {
+  if (!existingOrder?.points?.length) {
+    throw new Error("existingOrder required for edit");
+  }
+
+  const payload = {
     order_id: Number(borzoOrderId),
-    ...data,
   };
+
+  // 1. Matter
+  if (data.matter) {
+    payload.matter = data.matter;
+  }
+
+  // 2. Weight
+  if (data.package?.weight) {
+    payload.total_weight_kg = Number(data.package.weight);
+  }
+
+  const updatedPoints = [];
+
+  // 3. Pickup update
+  if (data.pickup) {
+    updatedPoints.push({
+      point_id: existingOrder.points[0].point_id,
+      address: data.pickup.address,
+      latitude: data.pickup.lat || null,
+      longitude: data.pickup.lng || null,
+    });
+  }
+
+  // 4. Drop update
+  if (data.drop && existingOrder.points.length >= 2) {
+    updatedPoints.push({
+      point_id: existingOrder.points[1].point_id,
+      address: data.drop.address,
+      latitude: data.drop.lat || null,
+      longitude: data.drop.lng || null,
+    });
+  }
+
+  // 5. COD update (merge into drop)
+  if (data.cod && existingOrder.points.length >= 2) {
+    updatedPoints.push({
+      point_id: existingOrder.points[1].point_id,
+      taking_amount: Number(data.cod.amount || 0),
+      is_cod_cash_voucher_required: !!data.cod.amount,
+    });
+  }
+
+  if (updatedPoints.length) {
+    payload.points = updatedPoints;
+  }
+
+  return payload;
 };
 
 module.exports = {

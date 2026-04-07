@@ -537,7 +537,33 @@ const editOrderService = async (id, userId, data) => {
 
   if (!order) throw new Error("Order not found");
 
-  const payload = mapEditPayload(order.borzoOrderId, data);
+  let providerOrder = order.rawProviderResponse?.order;
+
+  //  Fetch fresh Borzo order if missing
+  if (!providerOrder?.points?.length) {
+    const borzoRes = await pulseService.getOrder(order.borzoOrderId);
+
+    if (
+      !borzoRes?.is_successful ||
+      !borzoRes?.orders ||
+      borzoRes.orders.length === 0
+    ) {
+      throw new Error("Unable to fetch Borzo order data");
+    }
+
+    const borzoOrder = borzoRes.orders[0];
+
+    providerOrder = borzoOrder;
+
+    // persist for future edits
+    order.rawProviderResponse = {
+      order: borzoOrder,
+    };
+
+    await order.save();
+  }
+
+  const payload = mapEditPayload(order.borzoOrderId, data, providerOrder);
 
   // chatgpt change
   const response = await pulseService.editOrder(payload);
@@ -552,16 +578,21 @@ const editOrderService = async (id, userId, data) => {
     throw err;
   }
 
-  // if (
-  //   order.statusHistory.length === 0 ||
-  //   order.statusHistory[order.statusHistory.length - 1].status !== "UPDATED"
-  // ) {
-  //   order.statusHistory.push({ status: "UPDATED" });
-  // }
+  const updatedWeight = response?.order?.total_weight_kg;
+
+  if (updatedWeight !== undefined && updatedWeight !== null) {
+    order.package.weight = Number(updatedWeight);
+  }
+
+  if (data.matter) {
+    order.package.description = data.matter;
+  }
 
   order.rawProviderResponse = response;
 
   const savedOrder = await order.save();
+
+  order.rawProviderResponse = response;
 
   const io = getIO();
   io.to(`user:${savedOrder.user}`).emit("order-status-update", {
