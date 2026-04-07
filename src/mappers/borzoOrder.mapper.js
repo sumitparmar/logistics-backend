@@ -22,11 +22,19 @@ const mapCalculatePayload = (data) => {
         address: data.pickup.address,
         latitude: data.pickup.lat || null,
         longitude: data.pickup.lng || null,
+        contact_person: {
+          name: data.customer?.name || null,
+          phone: data.customer?.phone || null,
+        },
       },
       {
         address: data.drop.address,
         latitude: data.drop.lat || null,
         longitude: data.drop.lng || null,
+        contact_person: {
+          name: data.customer?.name || null,
+          phone: data.customer?.phone || null,
+        },
       },
     ],
   };
@@ -43,9 +51,8 @@ const mapCalculatePayload = (data) => {
   }
 
   // EOD (CRITICAL)
-  if (data.deliveryType === "EOD" || data.deliveryType === "END_OF_DAY") {
-    payload.type = "endofday";
-    payload.total_weight_kg = data.package?.weight || 1;
+  if (data.package?.weight) {
+    payload.total_weight_kg = Number(data.package.weight);
   }
 
   // SCHEDULED
@@ -121,8 +128,8 @@ const mapCreateOrderPayload = (data) => {
     payload.vehicle_type_id = vehicleId;
   }
 
-  if (data.deliveryType === "EOD" || data.deliveryType === "END_OF_DAY") {
-    payload.total_weight_kg = data.package?.weight || 1;
+  if (data.package?.weight) {
+    payload.total_weight_kg = Number(data.package.weight);
   }
 
   if (data.deliveryType === "EOD" || data.deliveryType === "END_OF_DAY") {
