@@ -361,11 +361,7 @@ const cancelOrderService = async (id, userId) => {
     throw err;
   }
 
-  const cancellableStatuses = [
-    "CREATED", // Borzo: new
-    "ASSIGNED", // Borzo: available
-    "IN_TRANSIT", // Borzo: active
-  ];
+  const cancellableStatuses = ["CREATED", "ASSIGNED", "IN_TRANSIT", "DELAYED"];
 
   if (!cancellableStatuses.includes(order.status)) {
     const err = new Error(`Cannot cancel order in ${order.status} state`);
