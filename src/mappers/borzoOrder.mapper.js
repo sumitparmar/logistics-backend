@@ -32,7 +32,7 @@ const mapCalculatePayload = (data) => {
   };
 
   // STANDARD
-  if (data.deliveryType !== "EOD") {
+  if (data.deliveryType !== "EOD" && data.deliveryType !== "END_OF_DAY") {
     payload.vehicle_type_id = vehicleId;
   }
 
@@ -43,7 +43,7 @@ const mapCalculatePayload = (data) => {
   }
 
   // EOD (CRITICAL)
-  if (data.deliveryType === "EOD") {
+  if (data.deliveryType === "EOD" || data.deliveryType === "END_OF_DAY") {
     payload.type = "endofday";
     payload.total_weight_kg = data.package?.weight || 1;
   }
@@ -117,15 +117,15 @@ const mapCreateOrderPayload = (data) => {
   };
 
   // ONLY add vehicle for standard
-  if (data.deliveryType !== "EOD") {
+  if (data.deliveryType !== "EOD" && data.deliveryType !== "END_OF_DAY") {
     payload.vehicle_type_id = vehicleId;
   }
 
-  if (data.deliveryType === "EOD") {
+  if (data.deliveryType === "EOD" || data.deliveryType === "END_OF_DAY") {
     payload.total_weight_kg = data.package?.weight || 1;
   }
 
-  if (data.deliveryType === "EOD") {
+  if (data.deliveryType === "EOD" || data.deliveryType === "END_OF_DAY") {
     payload.type = "endofday";
   }
 
