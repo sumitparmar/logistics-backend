@@ -361,7 +361,13 @@ const cancelOrderService = async (id, userId) => {
     throw err;
   }
 
-  if (["DELIVERED", "CANCELLED", "FAILED"].includes(order.status)) {
+  const cancellableStatuses = [
+    "CREATED", // Borzo: new
+    "ASSIGNED", // Borzo: available
+    "IN_TRANSIT", // Borzo: active
+  ];
+
+  if (!cancellableStatuses.includes(order.status)) {
     const err = new Error(`Cannot cancel order in ${order.status} state`);
     err.statusCode = 400;
     throw err;
@@ -486,7 +492,17 @@ const calculateOrderService = async (data) => {
 
   const response = await pulseService.calculateOrder(payload);
 
-  const baseAmount = Number(response.order.payment_amount || 0);
+  const baseAmount = Number(
+    Number(response.order.payment_amount || 0).toFixed(2),
+  );
+
+  const declaredValue = data.package?.declaredValue || 0;
+
+  let insuranceCharge = 0;
+
+  if (declaredValue > 0) {
+    insuranceCharge = Math.round(2 + declaredValue * 0.01);
+  }
 
   // Get pricing config
   let pricingConfig = await AdminPricing.findOne({ isActive: true });
@@ -510,8 +526,10 @@ const calculateOrderService = async (data) => {
     });
   }
 
+  const finalAmount = Number((adjustedAmount + insuranceCharge).toFixed(2));
+
   return {
-    amount: adjustedAmount,
+    amount: finalAmount,
     currency: process.env.CURRENCY,
   };
 };

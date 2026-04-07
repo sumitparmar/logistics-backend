@@ -17,16 +17,41 @@ const mapCalculatePayload = (data) => {
 
   const payload = {
     matter: data.matter,
-    vehicle_type_id: vehicleId,
-    points: [{ address: data.pickup.address }, { address: data.drop.address }],
+    points: [
+      {
+        address: data.pickup.address,
+        latitude: data.pickup.lat || null,
+        longitude: data.pickup.lng || null,
+      },
+      {
+        address: data.drop.address,
+        latitude: data.drop.lat || null,
+        longitude: data.drop.lng || null,
+      },
+    ],
   };
-  if (data.deliveryType === "EOD") {
-    payload.type = "endofday";
+
+  // STANDARD
+  if (data.deliveryType !== "EOD") {
+    payload.vehicle_type_id = vehicleId;
   }
 
+  // COD
+  if (data.cod?.amount) {
+    payload.points[1].taking_amount = Number(data.cod.amount);
+    payload.points[1].is_cod_cash_voucher_required = true;
+  }
+
+  // EOD (CRITICAL)
+  if (data.deliveryType === "EOD") {
+    payload.type = "endofday";
+    payload.total_weight_kg = data.package?.weight || 1;
+  }
+
+  // SCHEDULED
   if (data.deliveryType === "SCHEDULED") {
     if (!data.scheduledAt) {
-      throw new Error("scheduledAt is required for scheduled delivery");
+      throw new Error("scheduledAt is required");
     }
 
     const scheduled = new Date(data.scheduledAt);
@@ -88,9 +113,17 @@ const mapCreateOrderPayload = (data) => {
 
   const payload = {
     matter: data.matter,
-    vehicle_type_id: vehicleId,
     points: [pickupPoint, dropPoint],
   };
+
+  // ONLY add vehicle for standard
+  if (data.deliveryType !== "EOD") {
+    payload.vehicle_type_id = vehicleId;
+  }
+
+  if (data.deliveryType === "EOD") {
+    payload.total_weight_kg = data.package?.weight || 1;
+  }
 
   if (data.deliveryType === "EOD") {
     payload.type = "endofday";
