@@ -538,12 +538,15 @@ const editOrderService = async (id, userId, data) => {
     throw err;
   }
 
-  // if (
-  //   order.statusHistory.length === 0 ||
-  //   order.statusHistory[order.statusHistory.length - 1].status !== "UPDATED"
-  // ) {
-  //   order.statusHistory.push({ status: "UPDATED" });
-  // }
+  const providerOrder = response?.order || response?.data?.order;
+
+  if (providerOrder) {
+    order.package.description = providerOrder.matter;
+
+    order.package.weight = providerOrder.total_weight_kg;
+
+    order.vehicleTypeId = providerOrder.vehicle_type_id;
+  }
 
   order.rawProviderResponse = response;
 
