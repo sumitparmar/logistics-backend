@@ -11,6 +11,12 @@ const {
 } = require("../controllers/adminNotification.controller");
 
 const {
+  getSupportTickets,
+  getSupportTicketById,
+  replyToSupportTicket,
+  updateSupportTicketStatus,
+} = require("../controllers/adminSupport.controller");
+const {
   getAdminPricing,
   updateAdminPricing,
 } = require("../controllers/adminPricing.controller");
@@ -84,4 +90,11 @@ router.get("/export", exportCSV);
 router.get("/notifications", fetchAdminNotifications);
 router.patch("/notifications/:id/read", markAdminNotificationAsRead);
 router.post("/notifications/test", createTestNotification);
+
+// SUPPORT
+router.get("/support/tickets", getSupportTickets);
+router.get("/support/tickets/:id", getSupportTicketById);
+router.post("/support/tickets/:id/reply", replyToSupportTicket);
+router.patch("/support/tickets/:id/status", updateSupportTicketStatus);
+
 module.exports = router;
