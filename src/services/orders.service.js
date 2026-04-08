@@ -554,6 +554,8 @@ const editOrderService = async (id, userId, data) => {
         address: pickupPoint.address,
         lat: pickupPoint.latitude ? Number(pickupPoint.latitude) : null,
         lng: pickupPoint.longitude ? Number(pickupPoint.longitude) : null,
+        name: order.customer?.name || null,
+        phone: order.customer?.phone || null,
       };
     }
 
@@ -562,9 +564,112 @@ const editOrderService = async (id, userId, data) => {
         address: dropPoint.address,
         lat: dropPoint.latitude ? Number(dropPoint.latitude) : null,
         lng: dropPoint.longitude ? Number(dropPoint.longitude) : null,
+        name: order.customer?.name || null,
+        phone: order.customer?.phone || null,
       };
     }
+
+    order.stops = [
+      {
+        type: "PICKUP",
+        address: order.pickup.address,
+        lat: order.pickup.lat,
+        lng: order.pickup.lng,
+        name: order.customer?.name || null,
+        phone: order.customer?.phone || null,
+      },
+      {
+        type: "DROP",
+        address: order.drop.address,
+        lat: order.drop.lat,
+        lng: order.drop.lng,
+        name: order.customer?.name || null,
+        phone: order.customer?.phone || null,
+      },
+    ];
   }
+
+  // ===== RE-CALCULATE PRICING AFTER EDIT =====
+  try {
+    const calculatePayload = mapCalculatePayload({
+      matter: order.package.description,
+      vehicleTypeId: order.vehicleTypeId,
+      pickup: {
+        address: order.pickup.address,
+      },
+      drop: {
+        address: order.drop.address,
+      },
+      deliveryType: order.deliveryType,
+    });
+
+    const priceResponse = await pulseService.calculateOrder(calculatePayload);
+
+    if (priceResponse?.order?.payment_amount) {
+      const baseAmount = Number(
+        Number(priceResponse.order.payment_amount || 0).toFixed(2),
+      );
+
+      let pricingConfig = await AdminPricing.findOne({ isActive: true });
+
+      if (!pricingConfig) {
+        pricingConfig = {
+          marginPercent: 0,
+          baseFees: { platformFee: 0, handlingFee: 0 },
+          surge: { enabled: false },
+          vehicleOverrides: [],
+        };
+      }
+
+      let adjustedAmount = baseAmount;
+
+      if (pricingConfig && baseAmount > 0) {
+        adjustedAmount = applyAdminPricing({
+          basePrice: baseAmount,
+          config: pricingConfig,
+          vehicleType: String(order.vehicleTypeId),
+        });
+      }
+
+      const finalAmount = Number(adjustedAmount.toFixed(2));
+
+      order.pricing = {
+        baseAmount,
+        adjustedAmount,
+        insurance: 0,
+        amount: finalAmount,
+        currency: process.env.CURRENCY,
+        calculatedAt: new Date(),
+      };
+
+      // ✅ ALSO UPDATE SNAPSHOT (CRITICAL FIX)
+      order.pricingSnapshot = {
+        basePrice: baseAmount,
+
+        marginPercent: pricingConfig.marginPercent,
+
+        platformFee: pricingConfig.baseFees?.platformFee || 0,
+        handlingFee: pricingConfig.baseFees?.handlingFee || 0,
+
+        surgeMultiplier: pricingConfig.surge?.multiplier || 1,
+        surgeApplied: pricingConfig.surge?.enabled || false,
+
+        vehicleType: String(order.vehicleTypeId),
+        vehicleMultiplier:
+          pricingConfig.vehicleOverrides?.find(
+            (v) => v.type === String(order.vehicleTypeId),
+          )?.multiplier || 1,
+
+        insurancePercent: pricingConfig.extras?.insurancePercent || 0,
+        codFee: pricingConfig.extras?.codFee || 0,
+
+        finalPrice: finalAmount,
+      };
+    }
+  } catch (err) {
+    console.error("Pricing recalculation failed:", err.message);
+  }
+
   order.rawProviderResponse = response;
 
   const savedOrder = await order.save();
