@@ -523,8 +523,7 @@ const editOrderService = async (id, userId, data) => {
 
   if (!order) throw new Error("Order not found");
 
-  const payload = mapEditPayload(order.borzoOrderId, data);
-
+  const payload = mapEditPayload(order.borzoOrderId, data, order);
   // chatgpt change
   const response = await pulseService.editOrder(payload);
 
@@ -542,12 +541,30 @@ const editOrderService = async (id, userId, data) => {
 
   if (providerOrder) {
     order.package.description = providerOrder.matter;
-
     order.package.weight = providerOrder.total_weight_kg;
-
     order.vehicleTypeId = providerOrder.vehicle_type_id;
-  }
 
+    const points = providerOrder.points || [];
+
+    const pickupPoint = points[0];
+    const dropPoint = points[1];
+
+    if (pickupPoint) {
+      order.pickup = {
+        address: pickupPoint.address,
+        lat: pickupPoint.latitude ? Number(pickupPoint.latitude) : null,
+        lng: pickupPoint.longitude ? Number(pickupPoint.longitude) : null,
+      };
+    }
+
+    if (dropPoint) {
+      order.drop = {
+        address: dropPoint.address,
+        lat: dropPoint.latitude ? Number(dropPoint.latitude) : null,
+        lng: dropPoint.longitude ? Number(dropPoint.longitude) : null,
+      };
+    }
+  }
   order.rawProviderResponse = response;
 
   const savedOrder = await order.save();

@@ -118,11 +118,40 @@ const mapCreateOrderPayload = (data) => {
   return payload;
 };
 
-const mapEditPayload = (borzoOrderId, data) => {
-  return {
+const mapEditPayload = (borzoOrderId, data, existingOrder) => {
+  const payload = {
     order_id: Number(borzoOrderId),
-    ...data,
   };
+
+  // ✅ SAFE FIELDS
+  if (data.matter) {
+    payload.matter = data.matter;
+  }
+
+  if (data.total_weight_kg !== undefined) {
+    payload.total_weight_kg = Number(data.total_weight_kg);
+  }
+
+  if (data.vehicle_type_id) {
+    payload.vehicle_type_id = Number(data.vehicle_type_id);
+  }
+
+  // ❗ CRITICAL: handle points correctly
+  if (data.points && existingOrder?.rawProviderResponse?.order?.points) {
+    payload.points = data.points.map((p, index) => {
+      const existingPoint =
+        existingOrder.rawProviderResponse.order.points[index];
+
+      return {
+        point_id: existingPoint.point_id, // REQUIRED by Borzo
+        address: p.address,
+        latitude: p.latitude,
+        longitude: p.longitude,
+      };
+    });
+  }
+
+  return payload;
 };
 
 module.exports = {
