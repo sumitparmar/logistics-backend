@@ -7,7 +7,7 @@ const { exportCSV } = require("../controllers/admin.controller");
 const {
   fetchAdminNotifications,
   markAdminNotificationAsRead,
-  createTestNotification, // 👈 ADD THIS
+  createTestNotification,
 } = require("../controllers/adminNotification.controller");
 
 const {
@@ -15,6 +15,8 @@ const {
   getSupportTicketById,
   replyToSupportTicket,
   updateSupportTicketStatus,
+  createSupportTicket,
+  getSupportTicketCounts,
 } = require("../controllers/adminSupport.controller");
 const {
   getAdminPricing,
@@ -93,8 +95,11 @@ router.post("/notifications/test", createTestNotification);
 
 // SUPPORT
 router.get("/support/tickets", getSupportTickets);
+router.get("/support/tickets/count", getSupportTicketCounts);
+
 router.get("/support/tickets/:id", getSupportTicketById);
 router.post("/support/tickets/:id/reply", replyToSupportTicket);
 router.patch("/support/tickets/:id/status", updateSupportTicketStatus);
+router.post("/support/tickets", createSupportTicket);
 
 module.exports = router;
