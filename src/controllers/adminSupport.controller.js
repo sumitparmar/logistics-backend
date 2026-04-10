@@ -1,6 +1,7 @@
 const AdminSupportTicket = require("../models/AdminSupportTicket");
 const mongoose = require("mongoose");
 const User = require("../models/User");
+const { getIO } = require("../config/socket");
 
 // GET SUPPORT TICKETS
 const getSupportTickets = async (req, res) => {
@@ -12,6 +13,10 @@ const getSupportTickets = async (req, res) => {
     const search = req.query.search?.trim();
 
     const query = {};
+
+    if (req.user.role !== "admin") {
+      query.user = req.user._id;
+    }
 
     if (req.query.status) {
       query.status = req.query.status;
@@ -144,6 +149,33 @@ const replyToSupportTicket = async (req, res) => {
       message,
     });
 
+    const io = getIO();
+
+    // get full updated ticket with messages
+    const updatedTicket = await AdminSupportTicket.findById(req.params.id)
+      .populate("user", "name email phone")
+      .lean();
+
+    const messages = await AdminSupportMessage.find({
+      ticket: req.params.id,
+    })
+      .sort({ createdAt: 1 })
+      .lean();
+
+    // send to USER
+    if (updatedTicket.user?._id) {
+      io.to(`user:${updatedTicket.user._id}`).emit("ticket_reply", {
+        ...updatedTicket,
+        messages,
+      });
+    }
+
+    // update ADMIN panels also
+    io.to("admin").emit("ticket_updated", {
+      ...updatedTicket,
+      messages,
+    });
+
     return res.json({
       success: true,
       data: newMessage,
@@ -182,6 +214,23 @@ const updateSupportTicketStatus = async (req, res) => {
 
     ticket.status = status;
     await ticket.save();
+
+    const io = getIO();
+
+    const updatedTicket = await AdminSupportTicket.findById(req.params.id)
+      .populate("user", "name email phone")
+      .lean();
+
+    const messages = await AdminSupportMessage.find({
+      ticket: req.params.id,
+    })
+      .sort({ createdAt: 1 })
+      .lean();
+
+    io.to("admin").emit("ticket_updated", {
+      ...updatedTicket,
+      messages,
+    });
 
     return res.json({
       success: true,
@@ -240,6 +289,15 @@ const createSupportTicket = async (req, res) => {
       priority,
       status: "open",
     });
+
+    await AdminSupportMessage.create({
+      ticket: ticket._id,
+      sender: "user",
+      message: req.body.message,
+    });
+
+    const io = getIO();
+    io.to("admin").emit("new_ticket", ticket);
 
     return res.json({
       success: true,

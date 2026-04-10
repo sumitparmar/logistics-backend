@@ -19,12 +19,13 @@ const initSocket = (server) => {
       socket.join(`user:${userId}`);
     });
 
-    //  ADMIN AUTO JOIN (CORRECT PLACE)
-    socket.join("admin");
-    console.log("✅ ADMIN AUTO-JOIN:", socket.id);
+    socket.on("join-admin", () => {
+      console.log("Admin joined");
+      socket.join("admin");
+    });
 
     socket.on("disconnect", () => {
-      console.log("❌ Socket disconnected:", socket.id);
+      console.log(" Socket disconnected:", socket.id);
     });
   });
 
