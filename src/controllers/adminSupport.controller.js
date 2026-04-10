@@ -2,7 +2,7 @@ const AdminSupportTicket = require("../models/AdminSupportTicket");
 const mongoose = require("mongoose");
 const User = require("../models/User");
 const { getIO } = require("../config/socket");
-
+const AdminNotification = require("../models/AdminNotification");
 // GET SUPPORT TICKETS
 const getSupportTickets = async (req, res) => {
   try {
@@ -34,6 +34,10 @@ const getSupportTickets = async (req, res) => {
 
       query.$or = [
         { subject: { $regex: search, $options: "i" } },
+
+        { name: { $regex: search, $options: "i" } },
+        { email: { $regex: search, $options: "i" } },
+
         ...(userIds.length ? [{ user: { $in: userIds } }] : []),
       ];
     }
@@ -288,6 +292,15 @@ const createSupportTicket = async (req, res) => {
       subject,
       priority,
       status: "open",
+    });
+
+    await AdminNotification.create({
+      type: "SYSTEM",
+      title: "New Support Ticket",
+      message: subject,
+      isRead: false,
+      priority: "HIGH",
+      ticketId: ticket._id,
     });
 
     await AdminSupportMessage.create({

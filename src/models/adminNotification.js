@@ -1,5 +1,4 @@
 const mongoose = require("mongoose");
-
 const adminNotificationSchema = new mongoose.Schema(
   {
     type: {
@@ -16,6 +15,11 @@ const adminNotificationSchema = new mongoose.Schema(
     message: {
       type: String,
       required: true,
+    },
+
+    ticketId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "AdminSupportTicket",
     },
 
     meta: {
