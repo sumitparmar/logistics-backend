@@ -201,34 +201,41 @@ const createSupportTicket = async (req, res) => {
     const { userId, subject, priority = "medium" } = req.body;
 
     //  REQUIRED FIELD CHECK
-    if (!userId || !subject) {
+    if (!subject) {
       return res.status(400).json({
         success: false,
         message: "userId and subject are required",
       });
     }
 
-    //  OBJECT ID VALIDATION
-    if (!mongoose.Types.ObjectId.isValid(userId)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid userId format",
-      });
-    }
+    let userExists = null;
 
-    //  CHECK USER EXISTS (CRITICAL FIX)
-    const userExists = await User.findById(userId);
+    if (userId) {
+      if (!mongoose.Types.ObjectId.isValid(userId)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid userId format",
+        });
+      }
 
-    if (!userExists) {
-      return res.status(404).json({
-        success: false,
-        message: "User not found",
-      });
+      userExists = await User.findById(userId);
+
+      if (!userExists) {
+        return res.status(404).json({
+          success: false,
+          message: "User not found",
+        });
+      }
     }
 
     //  CREATE TICKET
+    const { name, email, phone } = req.body;
+
     const ticket = await AdminSupportTicket.create({
-      user: userId,
+      user: userId || null,
+      name,
+      email,
+      phone,
       subject,
       priority,
       status: "open",
@@ -250,27 +257,32 @@ const createSupportTicket = async (req, res) => {
 
 const getSupportTicketCounts = async (req, res) => {
   try {
-    const tickets = await AdminSupportTicket.find({}, "status");
+    const counts = await AdminSupportTicket.aggregate([
+      {
+        $group: {
+          _id: "$status",
+          count: { $sum: 1 },
+        },
+      },
+    ]);
 
-    let counts = {
+    const formatted = {
       open: 0,
       "in-progress": 0,
       resolved: 0,
     };
 
-    tickets.forEach((t) => {
-      if (t.status === "open") counts.open++;
-      else if (t.status === "in-progress") counts["in-progress"]++;
-      else if (t.status === "resolved") counts.resolved++;
+    counts.forEach((c) => {
+      formatted[c._id] = c.count;
     });
 
-    res.json({
+    return res.json({
       success: true,
-      data: counts,
+      data: formatted,
     });
   } catch (err) {
     console.error("getSupportTicketCounts error:", err);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: "Failed to fetch ticket counts",
     });
