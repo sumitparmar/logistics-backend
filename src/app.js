@@ -43,13 +43,20 @@ app.use(requestId);
 // Security
 app.use(helmet());
 
+const allowedOrigins = [
+  process.env.FRONTEND_URL,
+  "http://localhost:4200",
+  "http://localhost:3000",
+].filter(Boolean);
+
 const corsOptions = {
   origin: function (origin, callback) {
-    const allowedOrigins = [process.env.FRONTEND_URL, "http://localhost:4200"];
+    if (!origin) return callback(null, true);
 
-    if (!origin || allowedOrigins.includes(origin)) {
+    if (allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
+      console.log("CORS BLOCKED:", origin);
       callback(new Error("Not allowed by CORS"));
     }
   },
