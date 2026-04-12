@@ -27,9 +27,7 @@ const startServer = async () => {
   const server = http.createServer(app);
   initSocket(server);
 
-  server.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-  });
+  server.listen(PORT, () => {});
 
   require("./workers/otp.worker");
 };

@@ -19,17 +19,9 @@ const mongoose = require("mongoose");
 // CREATE ORDER
 
 const createOrderService = async (data) => {
-  console.log("PACKAGE DATA:", data.package);
-  console.log("DECLARED VALUE:", data);
-
   if (data.deliveryType === "SCHEDULED") {
     data.scheduledAt =
       data.scheduledAt || data.scheduleDateTime || data.schedule || null;
-
-    console.log("SCHEDULE DEBUG:", {
-      deliveryType: data.deliveryType,
-      scheduledAt: data.scheduledAt,
-    });
 
     if (!data.scheduledAt) {
       throw new Error("scheduledAt missing at service level");
@@ -245,7 +237,6 @@ const createOrderService = async (data) => {
   setTimeout(async () => {
     try {
       await syncOrderService(savedOrder._id);
-      console.log("Auto-sync completed for:", savedOrder._id);
     } catch (err) {
       console.error("Auto-sync failed:", err.message);
     }

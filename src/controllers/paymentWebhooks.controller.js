@@ -16,7 +16,6 @@ const paymentSuccessWebhook = async (req, res) => {
       },
       { new: true },
     );
-    console.log("WEBHOOK INTENT FOUND:", intent);
 
     // Already processed OR not found
     if (!intent) {

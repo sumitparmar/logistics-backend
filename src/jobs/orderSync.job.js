@@ -14,8 +14,6 @@ const startOrderSyncJob = () => {
       }).limit(50);
 
       for (const order of orders) {
-        console.log("CRON SYNC CHECK:", order._id, order.status);
-
         const response = await pulseService.getOrder(order.borzoOrderId);
 
         if (

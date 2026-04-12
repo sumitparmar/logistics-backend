@@ -11,22 +11,16 @@ const initSocket = (server) => {
   });
 
   io.on("connection", (socket) => {
-    console.log("🔌 Socket connected:", socket.id);
-
     // USER JOIN
     socket.on("join-user", (userId) => {
-      console.log("User joined:", userId);
       socket.join(`user:${userId}`);
     });
 
     socket.on("join-admin", () => {
-      console.log("Admin joined");
       socket.join("admin");
     });
 
-    socket.on("disconnect", () => {
-      console.log(" Socket disconnected:", socket.id);
-    });
+    socket.on("disconnect", () => {});
   });
 
   return io;

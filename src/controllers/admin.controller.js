@@ -770,8 +770,6 @@ const updateOrderStatus = async (req, res) => {
     order.status = transitionStatus(order.status, status);
     if (status === "ASSIGNED") order.assignedAt = new Date();
     if (status === "PICKED_UP") order.pickedAt = new Date();
-    console.log("👉 Incoming status:", status);
-    console.log("👉 Existing deliveredAt:", order.deliveredAt);
     let isNewlyDelivered = false;
 
     if (status === "DELIVERED" && !order.deliveredAt) {
@@ -782,8 +780,6 @@ const updateOrderStatus = async (req, res) => {
     const savedOrder = await order.save();
 
     if (isNewlyDelivered) {
-      console.log("🔥 Notification Triggered for:", savedOrder._id);
-
       await createAdminNotification({
         type: "ORDER",
         title: "Order Delivered",
@@ -792,8 +788,6 @@ const updateOrderStatus = async (req, res) => {
         priority: "LOW",
       });
     }
-
-    console.log("🚀 EMITTING ADMIN EVENT:", savedOrder._id);
 
     const io = getIO();
 
@@ -808,7 +802,7 @@ const updateOrderStatus = async (req, res) => {
       data: savedOrder,
     });
 
-    // ✅ END
+    //  END
 
     res.json({
       success: true,

@@ -5,8 +5,6 @@ const AnalyticsDaily = require("../models/AnalyticsDaily");
 // Runs every night at 1 AM
 cron.schedule("0 1 * * *", async () => {
   try {
-    console.log(" Running daily analytics job...");
-
     const today = new Date();
     today.setDate(today.getDate() - 1);
     const start = new Date(today);
@@ -71,9 +69,7 @@ cron.schedule("0 1 * * *", async () => {
       },
       { upsert: true, new: true },
     );
-
-    console.log(" Daily analytics saved:", dateStr);
   } catch (err) {
-    console.error("❌ Analytics cron error:", err.message);
+    console.error(" Analytics cron error:", err.message);
   }
 });

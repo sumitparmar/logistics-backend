@@ -8,8 +8,6 @@ const CONCURRENCY = 5;
 otpQueue.process(CONCURRENCY, async (job) => {
   const { phone, otp, email } = job.data;
 
-  console.log(`[OTP WORKER] Job ${job.id} started for ${phone}`);
-
   try {
     // Send SMS (required)
     await sendSms(phone, `Your OTP is ${otp}`);
@@ -35,7 +33,6 @@ otpQueue.process(CONCURRENCY, async (job) => {
       }
     }
 
-    console.log(`[OTP WORKER] Job ${job.id} completed`);
     return true;
   } catch (error) {
     console.error(`[OTP WORKER] Job ${job.id} failed:`, error.message);
@@ -46,9 +43,7 @@ otpQueue.process(CONCURRENCY, async (job) => {
 });
 
 // Queue lifecycle logging
-otpQueue.on("completed", (job) => {
-  console.log(`[OTP QUEUE] Job ${job.id} marked completed`);
-});
+otpQueue.on("completed", (job) => {});
 
 otpQueue.on("failed", (job, err) => {
   console.error(
