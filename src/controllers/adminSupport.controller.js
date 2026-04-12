@@ -4,6 +4,11 @@ const User = require("../models/User");
 const { getIO } = require("../config/socket");
 const AdminNotification = require("../models/AdminNotification");
 // GET SUPPORT TICKETS
+
+const escapeRegex = (text) => {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+};
+
 const getSupportTickets = async (req, res) => {
   try {
     const page = Math.max(parseInt(req.query.page) || 1, 1);
@@ -22,26 +27,32 @@ const getSupportTickets = async (req, res) => {
       query.status = req.query.status;
     }
 
-    if (search) {
+    if (search && search.trim().length >= 2) {
+      const safeSearch = escapeRegex(search);
+
       const users = await User.find({
         $or: [
-          { name: { $regex: search, $options: "i" } },
-          { email: { $regex: search, $options: "i" } },
+          { name: { $regex: safeSearch, $options: "i" } },
+          { email: { $regex: safeSearch, $options: "i" } },
         ],
-      }).select("_id");
+      })
+        .select("_id")
+        .limit(50);
 
       const userIds = users.map((u) => u._id);
 
-      query.$or = [
-        { subject: { $regex: search, $options: "i" } },
-
-        { name: { $regex: search, $options: "i" } },
-        { email: { $regex: search, $options: "i" } },
-
-        ...(userIds.length ? [{ user: { $in: userIds } }] : []),
+      const orConditions = [
+        { subject: { $regex: safeSearch, $options: "i" } },
+        { name: { $regex: safeSearch, $options: "i" } },
+        { email: { $regex: safeSearch, $options: "i" } },
       ];
-    }
 
+      if (userIds.length) {
+        orConditions.push({ user: { $in: userIds } });
+      }
+
+      query.$or = orConditions;
+    }
     const [tickets, total] = await Promise.all([
       AdminSupportTicket.find(query)
         .populate("user", "name email phone")
