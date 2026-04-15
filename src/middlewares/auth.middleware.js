@@ -21,7 +21,10 @@ const protect = async (req, res, next) => {
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-    const user = await User.findById(decoded.id).select("-password");
+    const user = await User.findById(decoded.id).select("-password").populate({
+      path: "adminRole",
+      select: "permissions name",
+    });
 
     if (!user) {
       return res.status(401).json({
@@ -35,7 +38,11 @@ const protect = async (req, res, next) => {
       role: user.role,
       email: user.email,
       isActive: user.isActive,
+
+      adminRole: user.adminRole || null,
+      permissions: user.adminRole?.permissions || [],
     };
+
     next();
   } catch (error) {
     return res.status(401).json({

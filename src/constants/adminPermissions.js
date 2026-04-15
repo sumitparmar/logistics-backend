@@ -1,15 +1,41 @@
 module.exports = {
-  USERS: ["users.read", "users.create", "users.update", "users.delete"],
+  USERS: {
+    READ: "users.read",
+    CREATE: "users.create",
+    UPDATE: "users.update",
+    DELETE: "users.delete",
+  },
 
-  ORDERS: ["orders.read", "orders.update", "orders.cancel"],
+  ORDERS: {
+    READ: "orders.read",
+    UPDATE: "orders.update",
+    CANCEL: "orders.cancel",
+  },
 
-  DRIVERS: ["drivers.read", "drivers.update"],
+  DRIVERS: {
+    READ: "drivers.read",
+    UPDATE: "drivers.update",
+  },
 
-  PAYMENTS: ["payments.read"],
+  PAYMENTS: {
+    READ: "payments.read",
+  },
 
-  SUPPORT: ["support.read", "support.reply"],
+  SUPPORT: {
+    READ: "support.read",
+    REPLY: "support.reply",
+    UPDATE: "support.update",
+    CREATE: "support.create",
+  },
 
-  PRICING: ["pricing.read", "pricing.update"],
+  PRICING: {
+    READ: "pricing.read",
+    UPDATE: "pricing.update",
+  },
 
-  NOTIFICATIONS: ["notifications.read"],
+  NOTIFICATIONS: {
+    READ: "notifications.read",
+    UPDATE: "notifications.update",
+    CREATE: "notifications.create",
+  },
 };

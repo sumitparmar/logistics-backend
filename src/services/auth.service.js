@@ -36,8 +36,7 @@ const registerUser = async (data) => {
 
     await existingUser.save();
 
-    const verificationUrl = `${process.env.API_BASE_URL}/api/auth/verify-email?token=${verificationToken}`;
-
+    const verificationUrl = `${process.env.FRONTEND_URL}/verify-email?token=${verificationToken}`;
     await sendEmail(
       existingUser.email,
       "Verify your email - MoveKart Logistics",
@@ -68,7 +67,7 @@ const registerUser = async (data) => {
     emailVerificationExpires: Date.now() + 24 * 60 * 60 * 1000,
   });
 
-  const verificationUrl = `${process.env.API_BASE_URL}/api/auth/verify-email?token=${verificationToken}`;
+  const verificationUrl = `${process.env.FRONTEND_URL}/verify-email?token=${verificationToken}`;
   await sendEmail(
     user.email,
     "Verify your email - MoveKart Logistics",

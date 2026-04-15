@@ -24,12 +24,11 @@ const allowPermissions = (...requiredPermissions) => {
         });
       }
 
-      // ✅ SUPER ADMIN (no adminRole → full access)
       if (req.user.role === "admin" && !req.user.adminRole) {
         return next();
       }
 
-      // ❌ Not an admin
+      //  Not an admin
       if (req.user.role !== "admin") {
         return res.status(403).json({
           success: false,
@@ -37,21 +36,16 @@ const allowPermissions = (...requiredPermissions) => {
         });
       }
 
-      // 🔎 Fetch role
-      const role = await AdminRole.findById(req.user.adminRole);
+      //  USE PERMISSIONS FROM req.user (NO DB CALL)
+      const userPermissions = req.user.permissions || [];
 
-      if (!role) {
-        return res.status(403).json({
-          success: false,
-          message: "No role assigned",
-        });
-      }
-
-      // ✅ Permission check
       const hasAccess = requiredPermissions.every((perm) =>
-        role.permissions.includes(perm),
+        userPermissions.includes(perm),
       );
-
+      console.log("---- RBAC DEBUG ----");
+      console.log("REQUIRED:", requiredPermissions);
+      console.log("USER PERMISSIONS:", req.user.permissions);
+      console.log("--------------------");
       if (!hasAccess) {
         return res.status(403).json({
           success: false,

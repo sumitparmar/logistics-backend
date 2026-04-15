@@ -77,19 +77,23 @@ const verifyOtpController = async (req, res, next) => {
   }
 };
 
-const verifyEmailController = async (req, res, next) => {
+const verifyEmailController = async (req, res) => {
   try {
     const { token } = req.query;
 
     if (!token) {
-      return sendError(res, "Verification token required", 400);
+      return res.redirect(
+        `${process.env.FRONTEND_URL}/auth/login?verified=false`,
+      );
     }
 
     await verifyEmail(token);
 
     return res.redirect(`${process.env.FRONTEND_URL}/auth/login?verified=true`);
   } catch (error) {
-    next(error);
+    return res.redirect(
+      `${process.env.FRONTEND_URL}/auth/login?verified=false`,
+    );
   }
 };
 

@@ -6,7 +6,9 @@ const {
   allowRoles,
   allowPermissions,
 } = require("../middlewares/role.middleware");
-// CONTROLLERS
+
+const PERMISSIONS = require("../constants/adminPermissions");
+
 const { getPricingAnalytics } = require("../controllers/analytics.controller");
 
 const {
@@ -89,7 +91,11 @@ router.get(
   getWebhookFailures,
 );
 
-router.get("/dashboard", allowPermissions("users.read"), getDashboard);
+router.get(
+  "/dashboard",
+  allowPermissions(PERMISSIONS.USERS.READ),
+  getDashboard,
+);
 
 router.get(
   "/analytics/orders-summary",
@@ -120,7 +126,8 @@ router.get(
 // =========================
 // USERS
 // =========================
-router.get("/users", allowPermissions("users.read"), getUsers);
+router.get("/users", allowPermissions(PERMISSIONS.USERS.READ), getUsers);
+
 router.get("/users/:id", allowPermissions("users.read"), getUserById);
 router.put("/users/:id", allowPermissions("users.update"), updateUser);
 router.delete("/users/:id", allowPermissions("users.delete"), deleteUser);

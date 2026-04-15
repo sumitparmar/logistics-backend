@@ -5,7 +5,9 @@ const User = require("../models/User");
 const Order = require("../models/Order");
 const AdminRole = require("../models/AdminRole");
 const adminPermissions = require("../constants/adminPermissions");
-const ALL_PERMISSIONS = Object.values(adminPermissions).flat();
+const ALL_PERMISSIONS = Object.values(adminPermissions).flatMap((module) =>
+  Object.values(module),
+);
 const {
   createAdminNotification,
 } = require("../services/adminNotification.service");
@@ -1247,7 +1249,7 @@ const assignRoleToUser = async (req, res) => {
 // REMOVE ROLE FROM USER
 const removeRoleFromUser = async (req, res) => {
   try {
-    const { userId } = req.params;
+    const userId = req.params.id;
 
     const user = await User.findById(userId);
 
