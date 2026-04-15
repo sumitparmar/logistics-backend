@@ -91,6 +91,12 @@ const userSchema = new mongoose.Schema(
       default: "user",
     },
 
+    adminRole: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "AdminRole",
+      default: null,
+    },
+
     // OPTIONAL METADATA
     lastLoginAt: {
       type: Date,

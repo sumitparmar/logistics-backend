@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const { orderLimiter } = require("../middlewares/rateLimiter");
-const allowRoles = require("../middlewares/role.middleware");
+const { allowRoles } = require("../middlewares/role.middleware");
 const validate = require("../middlewares/validate.middleware");
 const {
   createOrderSchema,
@@ -51,8 +51,7 @@ router.get("/:id/courier", protect, getCourierInfo);
 // ACTIONS
 router.post("/:id/cancel", protect, cancelOrder);
 
-router.get("/:id/sync", protect, allowRoles("Admin"), syncOrder);
-
+router.get("/:id/sync", protect, allowRoles("admin"), syncOrder);
 router.post("/calculate", validate(calculateOrderSchema), calculateOrder);
 
 router.post("/:id/edit", protect, editOrder);

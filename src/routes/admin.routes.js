@@ -1,14 +1,28 @@
 const express = require("express");
 const router = express.Router();
-const { getPricingAnalytics } = require("../controllers/analytics.controller");
+
 const protect = require("../middlewares/auth.middleware");
-const allowRoles = require("../middlewares/role.middleware");
-const { exportCSV } = require("../controllers/admin.controller");
+const {
+  allowRoles,
+  allowPermissions,
+} = require("../middlewares/role.middleware");
+// CONTROLLERS
+const { getPricingAnalytics } = require("../controllers/analytics.controller");
+
 const {
   fetchAdminNotifications,
   markAdminNotificationAsRead,
   createTestNotification,
 } = require("../controllers/adminNotification.controller");
+
+const {
+  getAdminRoles,
+  createAdminRole,
+  updateAdminRole,
+  deleteAdminRole,
+  getAdminPermissions,
+  exportCSV,
+} = require("../controllers/admin.controller");
 
 const {
   getSupportTickets,
@@ -18,6 +32,7 @@ const {
   createSupportTicket,
   getSupportTicketCounts,
 } = require("../controllers/adminSupport.controller");
+
 const {
   getAdminPricing,
   updateAdminPricing,
@@ -28,6 +43,7 @@ const {
   getUsers,
   getUserById,
   updateUser,
+  deleteUser,
   getProviderHealth,
   getReconciliationIssues,
   getFailedJobs,
@@ -44,62 +60,199 @@ const {
   cancelOrdersBulk,
   cancelOrder,
   getCouriers,
-  deleteUser,
+  assignRoleToUser,
+  removeRoleFromUser,
 } = require("../controllers/admin.controller");
 
 // =========================
-// MIDDLEWARE
+// GLOBAL MIDDLEWARE
 // =========================
 router.use(protect);
-router.use(allowRoles("admin"));
 
 // =========================
 // ANALYTICS
 // =========================
-router.get("/providers/health", getProviderHealth);
-router.get("/reconciliation/issues", getReconciliationIssues);
-router.get("/jobs/failed", getFailedJobs);
-router.get("/webhooks/failed", getWebhookFailures);
-router.get("/analytics/orders-summary", getOrdersSummary);
-router.get("/analytics/revenue-summary", getRevenueSummary);
-router.get("/analytics/cod-outstanding", getCodOutstanding);
-router.get("/analytics/wallet-balances", getWalletBalances);
-router.get("/analytics/provider-performance", getProviderPerformance);
-router.get("/dashboard", getDashboard);
+router.get(
+  "/providers/health",
+  allowPermissions("orders.read"),
+  getProviderHealth,
+);
+router.get(
+  "/reconciliation/issues",
+  allowPermissions("orders.read"),
+  getReconciliationIssues,
+);
+router.get("/jobs/failed", allowPermissions("orders.read"), getFailedJobs);
+router.get(
+  "/webhooks/failed",
+  allowPermissions("orders.read"),
+  getWebhookFailures,
+);
 
-router.get("/users", getUsers);
-router.get("/users/:id", getUserById);
-router.put("/users/:id", updateUser);
-router.delete("/users/:id", deleteUser);
+router.get("/dashboard", allowPermissions("users.read"), getDashboard);
 
-router.get("/orders", getOrders);
-router.get("/couriers", getCouriers);
+router.get(
+  "/analytics/orders-summary",
+  allowPermissions("orders.read"),
+  getOrdersSummary,
+);
+router.get(
+  "/analytics/revenue-summary",
+  allowPermissions("payments.read"),
+  getRevenueSummary,
+);
+router.get(
+  "/analytics/cod-outstanding",
+  allowPermissions("payments.read"),
+  getCodOutstanding,
+);
+router.get(
+  "/analytics/wallet-balances",
+  allowPermissions("payments.read"),
+  getWalletBalances,
+);
+router.get(
+  "/analytics/provider-performance",
+  allowPermissions("orders.read"),
+  getProviderPerformance,
+);
 
-router.put("/orders/bulk/status", updateOrdersBulkStatus);
-router.put("/orders/bulk/cancel", cancelOrdersBulk);
+// =========================
+// USERS
+// =========================
+router.get("/users", allowPermissions("users.read"), getUsers);
+router.get("/users/:id", allowPermissions("users.read"), getUserById);
+router.put("/users/:id", allowPermissions("users.update"), updateUser);
+router.delete("/users/:id", allowPermissions("users.delete"), deleteUser);
 
-router.get("/orders/:id", getOrderById);
-router.put("/orders/:id/status", updateOrderStatus);
-router.put("/orders/:id/cancel", cancelOrder);
+router.post(
+  "/users/assign-role",
+  allowPermissions("users.update"),
+  assignRoleToUser,
+);
 
-router.get("/pricing", getAdminPricing);
-router.post("/pricing", updateAdminPricing);
-router.get("/pricing/analytics", getPricingAnalytics);
-router.get("/export", exportCSV);
+router.patch(
+  "/users/:id/remove-role",
+  allowPermissions("users.update"),
+  removeRoleFromUser,
+);
 
-//Notification
+// =========================
+// ORDERS (FIXED ORDER)
+// =========================
 
-router.get("/notifications", fetchAdminNotifications);
-router.patch("/notifications/:id/read", markAdminNotificationAsRead);
-router.post("/notifications/test", createTestNotification);
+// 🔥 BULK ROUTES FIRST (MOST SPECIFIC)
+router.put(
+  "/orders/bulk/status",
+  allowPermissions("orders.update"),
+  updateOrdersBulkStatus,
+);
 
+router.put(
+  "/orders/bulk/cancel",
+  allowPermissions("orders.cancel"),
+  cancelOrdersBulk,
+);
+
+// NORMAL LIST
+router.get("/orders", allowPermissions("orders.read"), getOrders);
+
+// SINGLE ORDER ROUTES
+router.get("/orders/:id", allowPermissions("orders.read"), getOrderById);
+
+router.put(
+  "/orders/:id/status",
+  allowPermissions("orders.update"),
+  updateOrderStatus,
+);
+
+router.put(
+  "/orders/:id/cancel",
+  allowPermissions("orders.cancel"),
+  cancelOrder,
+);
+
+// =========================
+// COURIERS
+// =========================
+router.get("/couriers", allowPermissions("drivers.read"), getCouriers);
+
+// =========================
+// PRICING
+// =========================
+router.get("/pricing", allowPermissions("pricing.read"), getAdminPricing);
+router.post("/pricing", allowPermissions("pricing.update"), updateAdminPricing);
+router.get(
+  "/pricing/analytics",
+  allowPermissions("pricing.read"),
+  getPricingAnalytics,
+);
+
+// =========================
+// EXPORT
+// =========================
+router.get("/export", allowPermissions("orders.read"), exportCSV);
+
+// =========================
+// NOTIFICATIONS
+// =========================
+router.get(
+  "/notifications",
+  allowPermissions("notifications.read"),
+  fetchAdminNotifications,
+);
+router.patch(
+  "/notifications/:id/read",
+  allowPermissions("notifications.update"),
+  markAdminNotificationAsRead,
+);
+router.post(
+  "/notifications/test",
+  allowPermissions("notifications.create"),
+  createTestNotification,
+);
+
+// =========================
 // SUPPORT
-router.get("/support/tickets", getSupportTickets);
-router.get("/support/tickets/count", getSupportTicketCounts);
+// =========================
+router.get(
+  "/support/tickets",
+  allowPermissions("support.read"),
+  getSupportTickets,
+);
+router.get(
+  "/support/tickets/count",
+  allowPermissions("support.read"),
+  getSupportTicketCounts,
+);
+router.get(
+  "/support/tickets/:id",
+  allowPermissions("support.read"),
+  getSupportTicketById,
+);
+router.post(
+  "/support/tickets/:id/reply",
+  allowPermissions("support.reply"),
+  replyToSupportTicket,
+);
+router.patch(
+  "/support/tickets/:id/status",
+  allowPermissions("support.update"),
+  updateSupportTicketStatus,
+);
+router.post(
+  "/support/tickets",
+  allowPermissions("support.create"),
+  createSupportTicket,
+);
 
-router.get("/support/tickets/:id", getSupportTicketById);
-router.post("/support/tickets/:id/reply", replyToSupportTicket);
-router.patch("/support/tickets/:id/status", updateSupportTicketStatus);
-router.post("/support/tickets", createSupportTicket);
+// =========================
+// ROLES (RBAC)
+// =========================
+router.get("/roles", allowPermissions("users.read"), getAdminRoles);
+router.post("/roles", allowPermissions("users.create"), createAdminRole);
+router.put("/roles/:id", allowPermissions("users.update"), updateAdminRole);
+router.delete("/roles/:id", allowPermissions("users.delete"), deleteAdminRole);
+router.get("/permissions", allowPermissions("users.read"), getAdminPermissions);
 
 module.exports = router;

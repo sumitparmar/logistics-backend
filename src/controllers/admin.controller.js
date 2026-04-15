@@ -3,6 +3,9 @@ const Reconciliation = require("../models/Reconciliation");
 const FailedJob = require("../models/failedJob.model");
 const User = require("../models/User");
 const Order = require("../models/Order");
+const AdminRole = require("../models/AdminRole");
+const adminPermissions = require("../constants/adminPermissions");
+const ALL_PERMISSIONS = Object.values(adminPermissions).flat();
 const {
   createAdminNotification,
 } = require("../services/adminNotification.service");
@@ -168,8 +171,9 @@ const getUsers = async (req, res) => {
 
     const [users, total] = await Promise.all([
       User.find(filter)
+        .populate("adminRole", "name permissions")
         .select(
-          "name email phone role isActive isEmailVerified isPhoneVerified authProvider lastLoginAt createdAt",
+          "name email phone role adminRole isActive isEmailVerified isPhoneVerified authProvider lastLoginAt createdAt",
         )
         .sort({ createdAt: -1 })
         .skip(skip)
@@ -200,7 +204,9 @@ const getUsers = async (req, res) => {
 
 const getUserById = async (req, res) => {
   try {
-    const user = await User.findById(req.params.id).select("-password");
+    const user = await User.findById(req.params.id)
+      .populate("adminRole", "name permissions")
+      .select("-password");
 
     if (!user) {
       return res.status(404).json({
@@ -721,37 +727,6 @@ const getOrderById = async (req, res, next) => {
   }
 };
 
-// const Order = require("../models/order.model");
-
-// const updateOrderStatus = async (req, res) => {
-//   try {
-//     const { status } = req.body;
-//     const orderId = req.params.id;
-
-//     const order = await Order.findById(orderId);
-
-//     if (!order) {
-//       return res.status(404).json({ message: "Order not found" });
-//     }
-
-//     order.status = status;
-
-//     if (status === "ASSIGNED") order.assignedAt = new Date();
-//     if (status === "PICKED_UP") order.pickedAt = new Date();
-//     if (status === "DELIVERED") order.deliveredAt = new Date();
-
-//     await order.save();
-
-//     res.json({
-//       success: true,
-//       data: order,
-//     });
-//   } catch (err) {
-//     console.error("UPDATE STATUS ERROR:", err); // ✅ ADD THIS
-//     res.status(500).json({ message: "Server error", error: err.message });
-//   }
-// };
-
 const { getIO } = require("../config/socket"); // add at top if missing
 
 const updateOrderStatus = async (req, res) => {
@@ -920,7 +895,7 @@ const cancelOrdersBulk = async (req, res) => {
       });
     }
 
-    // ✅ BULK CANCEL WITH TIMESTAMP
+    //  BULK CANCEL WITH TIMESTAMP
     const result = await Order.updateMany(
       {
         _id: { $in: orderIds },
@@ -934,7 +909,7 @@ const cancelOrdersBulk = async (req, res) => {
       },
     );
 
-    // ✅ GET SUCCESS / FAILURE SPLIT
+    //  GET SUCCESS / FAILURE SPLIT
     const updatedOrders = await Order.find({
       _id: { $in: orderIds },
       status: "CANCELLED",
@@ -1025,6 +1000,286 @@ const deleteUser = async (req, res) => {
   }
 };
 
+// ROLES (ADMIN RBAC)
+
+// GET ROLES
+const getAdminRoles = async (req, res) => {
+  try {
+    const page = Math.max(parseInt(req.query.page) || 1, 1);
+    const limit = Math.min(parseInt(req.query.limit) || 10, 100);
+    const search = req.query.search || "";
+
+    const skip = (page - 1) * limit;
+
+    const filter = search ? { name: { $regex: search, $options: "i" } } : {};
+
+    const [roles, total] = await Promise.all([
+      AdminRole.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit),
+
+      AdminRole.countDocuments(filter),
+    ]);
+
+    return res.json({
+      success: true,
+      data: roles,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+    });
+  } catch (error) {
+    console.error("getAdminRoles error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch roles",
+    });
+  }
+};
+
+// CREATE ROLE
+const createAdminRole = async (req, res) => {
+  try {
+    const { name, description, permissions = [] } = req.body;
+
+    // 🔴 Duplicate check
+    const exists = await AdminRole.findOne({
+      name: { $regex: `^${name}$`, $options: "i" },
+    });
+
+    if (exists) {
+      return res.status(400).json({
+        success: false,
+        message: "Role already exists",
+      });
+    }
+
+    // 🔴 Permission validation
+    const invalidPermissions = permissions.filter(
+      (p) => !ALL_PERMISSIONS.includes(p),
+    );
+
+    if (invalidPermissions.length) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid permissions detected",
+      });
+    }
+
+    const role = await AdminRole.create({
+      name: name.trim(),
+      description,
+      permissions,
+    });
+
+    return res.status(201).json({
+      success: true,
+      data: role,
+    });
+  } catch (error) {
+    console.error("createAdminRole error:", error);
+    return res.status(400).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+// UPDATE ROLE
+
+const updateAdminRole = async (req, res) => {
+  try {
+    const { name, description, permissions = [] } = req.body;
+
+    // 🔴 Duplicate check (exclude current)
+    const exists = await AdminRole.findOne({
+      name: { $regex: `^${name}$`, $options: "i" },
+      _id: { $ne: req.params.id },
+    });
+
+    if (exists) {
+      return res.status(400).json({
+        success: false,
+        message: "Role already exists",
+      });
+    }
+
+    // 🔴 Permission validation
+    const invalidPermissions = permissions.filter(
+      (p) => !ALL_PERMISSIONS.includes(p),
+    );
+
+    if (invalidPermissions.length) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid permissions detected",
+      });
+    }
+
+    const role = await AdminRole.findByIdAndUpdate(
+      req.params.id,
+      {
+        name: name.trim(),
+        description,
+        permissions,
+      },
+      { new: true },
+    );
+
+    return res.json({
+      success: true,
+      data: role,
+    });
+  } catch (error) {
+    console.error("updateAdminRole error:", error);
+    return res.status(400).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+// DELETE ROLE
+
+const deleteAdminRole = async (req, res) => {
+  try {
+    const roleId = req.params.id;
+
+    // 🔴 Check if role is assigned to users
+    const usersUsingRole = await User.countDocuments({
+      adminRole: roleId,
+    });
+
+    if (usersUsingRole > 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Role is assigned to users",
+      });
+    }
+
+    await AdminRole.findByIdAndDelete(roleId);
+
+    return res.json({
+      success: true,
+      message: "Role deleted",
+    });
+  } catch (error) {
+    console.error("deleteAdminRole error:", error);
+    return res.status(400).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+const getAdminPermissions = (req, res) => {
+  return res.json({
+    success: true,
+    data: adminPermissions,
+  });
+};
+
+// =========================
+// USER ROLE ASSIGNMENT
+// =========================
+
+// ASSIGN ROLE TO USER
+const assignRoleToUser = async (req, res) => {
+  try {
+    const { userId, roleId } = req.body;
+
+    if (!userId || !roleId) {
+      return res.status(400).json({
+        success: false,
+        message: "userId and roleId are required",
+      });
+    }
+
+    const user = await User.findById(userId);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    // Only admins can have adminRole
+    if (user.role !== "admin") {
+      return res.status(400).json({
+        success: false,
+        message: "Only admin users can have roles",
+      });
+    }
+
+    const role = await AdminRole.findById(roleId);
+
+    if (!role) {
+      return res.status(404).json({
+        success: false,
+        message: "Role not found",
+      });
+    }
+
+    user.adminRole = roleId;
+    await user.save();
+
+    const updatedUser = await User.findById(userId).populate(
+      "adminRole",
+      "name _id",
+    );
+
+    return res.json({
+      success: true,
+      message: "Role assigned successfully",
+      data: updatedUser,
+    });
+  } catch (error) {
+    console.error("assignRoleToUser error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to assign role",
+    });
+  }
+};
+
+// REMOVE ROLE FROM USER
+const removeRoleFromUser = async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    const user = await User.findById(userId);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    user.adminRole = null;
+    await user.save();
+
+    const updatedUser = await User.findById(userId).populate(
+      "adminRole",
+      "name _id",
+    );
+
+    return res.json({
+      success: true,
+      message: "Role removed successfully",
+      data: updatedUser,
+    });
+  } catch (error) {
+    console.error("removeRoleFromUser error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to remove role",
+    });
+  }
+};
+
 module.exports = {
   getProviderHealth,
   getReconciliationIssues,
@@ -1048,4 +1303,11 @@ module.exports = {
   getCouriers,
   exportCSV,
   deleteUser,
+  getAdminRoles,
+  createAdminRole,
+  updateAdminRole,
+  deleteAdminRole,
+  getAdminPermissions,
+  assignRoleToUser,
+  removeRoleFromUser,
 };
