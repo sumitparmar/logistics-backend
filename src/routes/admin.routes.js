@@ -1,8 +1,10 @@
 const express = require("express");
 const router = express.Router();
+
 const {
   getSettings,
   updateSettings,
+  getSettingsAuditLogs,
 } = require("../controllers/adminSettings.controller");
 
 const protect = require("../middlewares/auth.middleware");
@@ -152,7 +154,7 @@ router.patch(
 // ORDERS (FIXED ORDER)
 // =========================
 
-// 🔥 BULK ROUTES FIRST (MOST SPECIFIC)
+//  BULK ROUTES FIRST (MOST SPECIFIC)
 router.put(
   "/orders/bulk/status",
   allowPermissions("orders.update"),
@@ -266,11 +268,16 @@ router.put("/roles/:id", allowPermissions("users.update"), updateAdminRole);
 router.delete("/roles/:id", allowPermissions("users.delete"), deleteAdminRole);
 router.get("/permissions", allowPermissions("users.read"), getAdminPermissions);
 
-// =========================
 // SETTINGS
-// =========================
-router.get("/settings", allowPermissions("users.read"), getSettings);
 
-router.put("/settings", allowPermissions("users.update"), updateSettings);
+router.get("/settings", allowPermissions("settings.read"), getSettings);
+
+router.get(
+  "/settings/audit",
+  allowPermissions("settings.read"),
+  getSettingsAuditLogs,
+);
+
+router.put("/settings", allowPermissions("settings.update"), updateSettings);
 
 module.exports = router;

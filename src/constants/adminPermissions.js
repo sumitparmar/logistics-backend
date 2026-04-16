@@ -38,4 +38,9 @@ module.exports = {
     UPDATE: "notifications.update",
     CREATE: "notifications.create",
   },
+
+  SETTINGS: {
+    READ: "settings.read",
+    UPDATE: "settings.update",
+  },
 };

@@ -1,5 +1,5 @@
 const SystemSettings = require("../models/SystemSettings");
-
+const AuditLog = require("../models/AuditLog");
 const getOrCreateSettings = async () => {
   let settings = await SystemSettings.findOne();
 
@@ -12,7 +12,12 @@ const getOrCreateSettings = async () => {
 
 const getSettings = async (req, res) => {
   try {
-    const settings = await getOrCreateSettings();
+    await getOrCreateSettings();
+
+    const settings = await SystemSettings.findOne().populate(
+      "updatedBy",
+      "name email",
+    );
 
     return res.status(200).json({
       success: true,
@@ -22,6 +27,27 @@ const getSettings = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Failed to load settings",
+    });
+  }
+};
+
+const getSettingsAuditLogs = async (req, res) => {
+  try {
+    const logs = await AuditLog.find({
+      action: "SETTINGS_UPDATED",
+    })
+      .populate("user", "name email")
+      .sort({ createdAt: -1 })
+      .limit(5);
+
+    return res.status(200).json({
+      success: true,
+      data: logs,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Failed to load audit logs",
     });
   }
 };
@@ -43,15 +69,40 @@ const updateSettings = async (req, res) => {
       "sessionTimeoutMinutes",
     ];
 
+    const changes = {};
+
     allowedFields.forEach((field) => {
       if (req.body[field] !== undefined) {
-        settings[field] = req.body[field];
+        const oldValue = settings[field];
+        const newValue = req.body[field];
+
+        if (String(oldValue) !== String(newValue)) {
+          changes[field] = {
+            oldValue,
+            newValue,
+          };
+
+          settings[field] = newValue;
+        }
       }
     });
 
     settings.updatedBy = req.user?._id || null;
 
     await settings.save();
+
+    if (Object.keys(changes).length > 0) {
+      await AuditLog.create({
+        user: req.user?._id || null,
+        action: "SETTINGS_UPDATED",
+        ip: req.ip,
+        userAgent: req.headers["user-agent"],
+        meta: {
+          module: "settings",
+          changes,
+        },
+      });
+    }
 
     return res.status(200).json({
       success: true,
@@ -68,5 +119,6 @@ const updateSettings = async (req, res) => {
 
 module.exports = {
   getSettings,
+  getSettingsAuditLogs,
   updateSettings,
 };
