@@ -1,5 +1,9 @@
 const express = require("express");
 const router = express.Router();
+const {
+  getSettings,
+  updateSettings,
+} = require("../controllers/adminSettings.controller");
 
 const protect = require("../middlewares/auth.middleware");
 const {
@@ -261,5 +265,12 @@ router.post("/roles", allowPermissions("users.create"), createAdminRole);
 router.put("/roles/:id", allowPermissions("users.update"), updateAdminRole);
 router.delete("/roles/:id", allowPermissions("users.delete"), deleteAdminRole);
 router.get("/permissions", allowPermissions("users.read"), getAdminPermissions);
+
+// =========================
+// SETTINGS
+// =========================
+router.get("/settings", allowPermissions("users.read"), getSettings);
+
+router.put("/settings", allowPermissions("users.update"), updateSettings);
 
 module.exports = router;
