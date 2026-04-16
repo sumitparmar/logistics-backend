@@ -1200,6 +1200,13 @@ const assignRoleToUser = async (req, res) => {
 
     const user = await User.findById(userId);
 
+    if (user.role === "admin" && !user.adminRole) {
+      return res.status(400).json({
+        success: false,
+        message: "Cannot modify super admin role",
+      });
+    }
+
     if (!user) {
       return res.status(404).json({
         success: false,
@@ -1252,6 +1259,13 @@ const removeRoleFromUser = async (req, res) => {
     const userId = req.params.id;
 
     const user = await User.findById(userId);
+
+    if (user.role === "admin" && !user.adminRole) {
+      return res.status(400).json({
+        success: false,
+        message: "Cannot modify super admin",
+      });
+    }
 
     if (!user) {
       return res.status(404).json({
