@@ -232,8 +232,7 @@ const getUserById = async (req, res) => {
 
 const updateUser = async (req, res) => {
   try {
-    const { name, email, role, isActive } = req.body;
-
+    const { name, email, role, isActive, adminRoleId } = req.body;
     const updatePayload = {
       name,
       email,
@@ -249,6 +248,16 @@ const updateUser = async (req, res) => {
       }
 
       updatePayload.role = role;
+
+      // admin users can have adminRole
+      if (role === "admin") {
+        updatePayload.adminRole = adminRoleId || null;
+      }
+
+      // non-admin users cannot keep adminRole
+      if (role !== "admin") {
+        updatePayload.adminRole = null;
+      }
     }
 
     if (req.user._id.toString() === req.params.id && role && role !== "admin") {
