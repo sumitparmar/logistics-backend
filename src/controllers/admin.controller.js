@@ -696,7 +696,7 @@ const getDashboard = async (req, res) => {
       success: true,
       data: {
         totalUsers: totalUsers,
-        totalOrders: ordersCount,
+        totalOrders: totalOrders,
         revenue: revenueFiltered,
         usersChange: Number(usersChange.toFixed(2)),
         ordersChange: Number(ordersChange.toFixed(2)),
