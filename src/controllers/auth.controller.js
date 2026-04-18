@@ -5,7 +5,6 @@ const { verifyEmail } = require("../services/auth.service");
 const sendEmail = require("../utils/sendEmail");
 const crypto = require("crypto");
 const normalizePhone = require("../utils/normalizePhone");
-
 // REGISTER
 
 const register = async (req, res, next) => {
@@ -171,8 +170,6 @@ const changePassword = async (req, res, next) => {
 };
 
 const forgotPassword = async (req, res, next) => {
-  console.log("FORGOT PASSWORD CONTROLLER V2 LOADED");
-
   try {
     const { email } = req.body;
 
@@ -180,7 +177,9 @@ const forgotPassword = async (req, res, next) => {
       return sendError(res, "Email is required", 400);
     }
 
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ email }).select(
+      "+resetPasswordToken +resetPasswordExpire",
+    );
 
     // Always return success (security best practice)
     if (!user) {
@@ -196,10 +195,11 @@ const forgotPassword = async (req, res, next) => {
       .update(resetToken)
       .digest("hex");
 
-    user.resetPasswordToken = hashedToken;
-    user.resetPasswordExpire = Date.now() + 10 * 60 * 1000; // 10 mins
+    await User.findByIdAndUpdate(user._id, {
+      resetPasswordToken: hashedToken,
+      resetPasswordExpire: Date.now() + 10 * 60 * 1000,
+    });
 
-    await user.save();
     const resetUrl = `${process.env.FRONTEND_URL}/auth/reset-password?token=${resetToken}`;
 
     const html = `
@@ -231,26 +231,25 @@ const resetPassword = async (req, res, next) => {
     const user = await User.findOne({
       resetPasswordToken: hashedToken,
       resetPasswordExpire: { $gt: Date.now() },
-    });
+    }).select("+resetPasswordToken +resetPasswordExpire +password");
 
     if (!user) {
       return sendError(res, "Invalid or expired token", 400);
     }
 
-    const bcrypt = require("bcryptjs");
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    user.password = hashedPassword;
-    user.resetPasswordToken = undefined;
-    user.resetPasswordExpire = undefined;
-
-    await user.save();
+    await User.findByIdAndUpdate(user._id, {
+      password: hashedPassword,
+      $unset: { resetPasswordToken: "", resetPasswordExpire: "" },
+    });
 
     return sendSuccess(res, {}, "Password reset successful");
   } catch (error) {
     next(error);
   }
 };
+
 // EXPORTS
 
 module.exports = {

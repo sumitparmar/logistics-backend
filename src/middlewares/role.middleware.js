@@ -42,10 +42,7 @@ const allowPermissions = (...requiredPermissions) => {
       const hasAccess = requiredPermissions.every((perm) =>
         userPermissions.includes(perm),
       );
-      console.log("---- RBAC DEBUG ----");
-      console.log("REQUIRED:", requiredPermissions);
-      console.log("USER PERMISSIONS:", req.user.permissions);
-      console.log("--------------------");
+
       if (!hasAccess) {
         return res.status(403).json({
           success: false,
