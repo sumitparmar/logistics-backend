@@ -171,6 +171,8 @@ const changePassword = async (req, res, next) => {
 };
 
 const forgotPassword = async (req, res, next) => {
+  console.log("FORGOT PASSWORD CONTROLLER V2 LOADED");
+
   try {
     const { email } = req.body;
 
@@ -211,7 +213,8 @@ const forgotPassword = async (req, res, next) => {
     await sendEmail(user.email, "Reset Your Password", html);
     return sendSuccess(res, {}, "If email exists, reset link sent");
   } catch (error) {
-    next(error);
+    console.error("FORGOT PASSWORD ERROR:", error);
+    return sendError(res, error.message || "Failed to process request", 500);
   }
 };
 
