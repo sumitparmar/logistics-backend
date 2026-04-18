@@ -45,7 +45,7 @@ router.get("/list", protect, getOrders);
 
 // SINGLE
 // router.get("/:id", protect, getOrderById);
-router.get("/:id", getOrderById);
+router.get("/:id", protect, getOrderById);
 router.get("/:id/courier", protect, getCourierInfo);
 
 // ACTIONS

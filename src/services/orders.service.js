@@ -265,12 +265,17 @@ const getOrdersService = async (userId, query = {}) => {
   }
 
   if (query.status) {
-    if (query.status.includes(",")) {
+    if (query.status === "ACTIVE") {
+      filter.status = {
+        $in: ["CREATED", "ASSIGNED", "PICKED_UP", "IN_TRANSIT"],
+      };
+    } else if (query.status.includes(",")) {
       filter.status = { $in: query.status.split(",") };
     } else {
       filter.status = query.status;
     }
   }
+
   // SEARCH FILTER
   if (query.search) {
     const regex = new RegExp(query.search, "i");
