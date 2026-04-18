@@ -117,8 +117,28 @@ const updateSettings = async (req, res) => {
   }
 };
 
+const getPublicSettingsStatus = async (req, res) => {
+  try {
+    const settings = await getOrCreateSettings();
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        platformName: settings.platformName || "MoveKart",
+        maintenanceMode: !!settings.maintenanceMode,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Failed to load public settings",
+    });
+  }
+};
+
 module.exports = {
   getSettings,
   getSettingsAuditLogs,
   updateSettings,
+  getPublicSettingsStatus,
 };

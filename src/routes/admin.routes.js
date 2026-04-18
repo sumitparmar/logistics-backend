@@ -5,6 +5,7 @@ const {
   getSettings,
   updateSettings,
   getSettingsAuditLogs,
+  getPublicSettingsStatus,
 } = require("../controllers/adminSettings.controller");
 
 const protect = require("../middlewares/auth.middleware");
@@ -75,6 +76,7 @@ const {
 // =========================
 // GLOBAL MIDDLEWARE
 // =========================
+router.get("/public/settings-status", getPublicSettingsStatus);
 router.use(protect);
 
 // =========================
