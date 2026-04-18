@@ -4,13 +4,16 @@ const { sendSuccess, sendError } = require("../utils/response");
 const { verifyEmail } = require("../services/auth.service");
 const sendEmail = require("../utils/sendEmail");
 const crypto = require("crypto");
+const normalizePhone = require("../utils/normalizePhone");
 
 // REGISTER
 
 const register = async (req, res, next) => {
   try {
-    const payload = { ...req.body };
-
+    const payload = {
+      ...req.body,
+      phone: normalizePhone(req.body.phone),
+    };
     payload.role = "user";
 
     if (req.body.role === "admin") {
@@ -45,7 +48,7 @@ const login = async (req, res, next) => {
 
 const sendOtpController = async (req, res, next) => {
   try {
-    const { phone } = req.body;
+    const phone = normalizePhone(req.body.phone);
 
     if (!phone) {
       return sendError(res, "Phone number required", 400);
@@ -63,7 +66,8 @@ const sendOtpController = async (req, res, next) => {
 
 const verifyOtpController = async (req, res, next) => {
   try {
-    const { phone, otp } = req.body;
+    const phone = normalizePhone(req.body.phone);
+    const { otp } = req.body;
 
     if (!phone || !otp) {
       return sendError(res, "Phone and OTP required", 400);
@@ -116,7 +120,7 @@ const updateProfile = async (req, res, next) => {
   try {
     const updates = {
       name: req.body.name,
-      phone: req.body.phone,
+      phone: req.body.phone ? normalizePhone(req.body.phone) : undefined,
       businessName: req.body.businessName,
 
       ...(req.body.deliveryMode && { deliveryMode: req.body.deliveryMode }),

@@ -1,5 +1,5 @@
 const mongoose = require("mongoose");
-
+const normalizePhone = require("../utils/normalizePhone");
 const userSchema = new mongoose.Schema(
   {
     // BASIC PROFILE
@@ -112,5 +112,17 @@ const userSchema = new mongoose.Schema(
     timestamps: true,
   },
 );
+
+userSchema.pre("save", function (next) {
+  if (this.phone) {
+    this.phone = normalizePhone(this.phone);
+  }
+
+  if (this.email) {
+    this.email = this.email.toLowerCase().trim();
+  }
+
+  next();
+});
 
 module.exports = mongoose.model("User", userSchema);
