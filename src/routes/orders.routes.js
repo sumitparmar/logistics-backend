@@ -61,18 +61,18 @@ router.get("/:id/history", protect, getProviderHistory);
 router.get("/:id/pricing-breakdown", protect, getPricingBreakdown);
 
 // PROVIDER
-router.get("/provider/list", protect, allowRoles("Admin"), listProviderOrders);
+router.get("/provider/list", protect, allowRoles("admin"), listProviderOrders);
 
 router.get(
   "/provider/client-profile",
   protect,
-  allowRoles("Admin"),
+  allowRoles("admin"),
   getClientProfile,
 );
 
-router.get("/provider/bank-cards", protect, allowRoles("Admin"), getBankCards);
+router.get("/provider/bank-cards", protect, allowRoles("admin"), getBankCards);
 
-router.get("/provider/labels", protect, allowRoles("Admin"), getLabels);
+router.get("/provider/labels", protect, allowRoles("admin"), getLabels);
 
 router.get("/:id/tracking", getTracking);
 
@@ -83,7 +83,7 @@ router.get("/:id/documents", protect, getDocuments);
 router.get(
   "/provider/:orderId",
   protect,
-  allowRoles("Admin"),
+  allowRoles("admin"),
   getProviderOrder,
 );
 

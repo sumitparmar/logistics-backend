@@ -19,6 +19,10 @@ const mongoose = require("mongoose");
 // CREATE ORDER
 
 const createOrderService = async (data) => {
+  if (!data.user) {
+    throw new Error("User is required");
+  }
+
   if (data.deliveryType === "SCHEDULED") {
     data.scheduledAt =
       data.scheduledAt || data.scheduleDateTime || data.schedule || null;
@@ -38,10 +42,26 @@ const createOrderService = async (data) => {
     {
       type: "DROP",
       ...data.drop,
-      name: data.customer?.name,
-      phone: data.customer?.phone,
+      name: data.stops?.[1]?.name || data.drop?.name || null,
+      phone: data.stops?.[1]?.phone || data.drop?.phone || data.customer?.phone,
     },
   ];
+
+  const recentExisting = await Order.findOne({
+    user: data.user,
+    "pickup.address": data.pickup?.address,
+    "drop.address": data.drop?.address,
+    createdAt: { $gte: new Date(Date.now() - 2 * 60 * 1000) },
+  }).sort({ createdAt: -1 });
+
+  if (
+    recentExisting &&
+    ["CREATED", "ASSIGNED"].includes(recentExisting.status)
+  ) {
+    const err = new Error("Similar order already created recently");
+    err.statusCode = 409;
+    throw err;
+  }
 
   // Delivery Type
   data.deliveryType = data.deliveryType || "NOW";
@@ -54,11 +74,21 @@ const createOrderService = async (data) => {
     declaredValue: data.declaredValue || null,
   };
 
+  // matter sync — Borzo mapper requires this
+  data.matter = data.matter || data.package?.description || null;
+
+  if (!data.matter) {
+    throw new Error("matter / package description is required");
+  }
+
   // Payment
   data.payment = data.payment || {
     method: "CASH",
     feePayer: "DROP",
   };
+
+  data.vehicleTypeId = data.vehicleTypeId || data.vehicleType;
+
   const vehicles = await getVehicleTypes();
 
   const validVehicle = vehicles.find(
@@ -245,12 +275,6 @@ const createOrderService = async (data) => {
   return savedOrder;
 };
 
-// LIST ORDERS
-
-// const getOrdersService = async (userId) => {
-//   return Order.find({ user: userId }).sort({ createdAt: -1 });
-// };
-
 const getOrdersService = async (userId, query = {}) => {
   const page = Math.max(parseInt(query.page) || 1, 1);
   const limit = Math.min(parseInt(query.limit) || 10, 50);
@@ -279,11 +303,12 @@ const getOrdersService = async (userId, query = {}) => {
   // SEARCH FILTER
   if (query.search) {
     const regex = new RegExp(query.search, "i");
-
     filter.$or = [
       { borzoOrderId: regex },
       { "pickup.address": regex },
       { "drop.address": regex },
+      { "customer.name": regex },
+      { "customer.phone": regex },
     ];
   }
 
@@ -364,7 +389,7 @@ const cancelOrderService = async (id, userId) => {
   }
 
   const response = await pulseService.cancelOrder({
-    order_id: order.borzoOrderId,
+    order_id: Number(order.borzoOrderId),
   });
 
   if (!response?.is_successful) {
@@ -381,6 +406,10 @@ const cancelOrderService = async (id, userId) => {
   const mappedStatus = mapBorzoStatus(providerStatus);
 
   order.status = transitionStatus(order.status, mappedStatus);
+
+  if (mappedStatus === "CANCELLED") {
+    order.codSettled = false;
+  }
 
   if (
     order.statusHistory.length === 0 ||
@@ -426,6 +455,15 @@ const syncOrderService = async (id, userId) => {
       courierId: courier.courier_id || courier.id || null,
       name: courier.name || null,
       phone: courier.phone || null,
+      //  Live location preserve karo
+      location: {
+        lat: courier.latitude
+          ? Number(courier.latitude)
+          : order.courier?.location?.lat || null,
+        lng: courier.longitude
+          ? Number(courier.longitude)
+          : order.courier?.location?.lng || null,
+      },
     };
   }
 
@@ -440,6 +478,11 @@ const syncOrderService = async (id, userId) => {
   const mappedStatus = mapBorzoStatus(deliveryStatus || borzoStatus);
 
   order.status = transitionStatus(order.status, mappedStatus);
+
+  if (mappedStatus === "DELIVERED" && !order.deliveredAt) {
+    order.deliveredAt = new Date();
+  }
+
   // ===== COD Settlement Update =====
   if (order.cod?.enabled) {
     order.cod.collectedAmount = backpaymentAmount;
@@ -478,6 +521,11 @@ const syncOrderService = async (id, userId) => {
 // CALCULATE PRICE
 
 const calculateOrderService = async (data) => {
+  data.package = data.package || {
+    weight: data.weight || 0,
+    declaredValue: data.declaredValue || 0,
+  };
+
   const payload = mapCalculatePayload(data);
 
   const response = await pulseService.calculateOrder(payload);
@@ -555,13 +603,15 @@ const editOrderService = async (id, userId, data) => {
       };
     }
 
+    const existingReceiver = order.stops?.[1];
+
     if (dropPoint) {
       order.drop = {
         address: dropPoint.address,
         lat: dropPoint.latitude ? Number(dropPoint.latitude) : null,
         lng: dropPoint.longitude ? Number(dropPoint.longitude) : null,
-        name: order.customer?.name || null,
-        phone: order.customer?.phone || null,
+        name: existingReceiver?.name || order.customer?.name || null,
+        phone: existingReceiver?.phone || order.customer?.phone || null,
       };
     }
 
@@ -579,8 +629,8 @@ const editOrderService = async (id, userId, data) => {
         address: order.drop.address,
         lat: order.drop.lat,
         lng: order.drop.lng,
-        name: order.customer?.name || null,
-        phone: order.customer?.phone || null,
+        name: existingReceiver?.name || order.customer?.name || null,
+        phone: existingReceiver?.phone || order.customer?.phone || null,
       },
     ];
   }

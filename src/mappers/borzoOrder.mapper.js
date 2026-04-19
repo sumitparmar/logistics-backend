@@ -9,19 +9,26 @@ const mapCalculatePayload = (data) => {
     throw new Error("pickup.address and drop.address are required");
   }
 
-  const allowedVehicles = [DEFAULT_BORZO_VEHICLE];
+  const VALID_VEHICLE_IDS = [1, 2, 3, 5, 8];
 
-  const vehicleId = allowedVehicles.includes(Number(data.vehicleTypeId))
+  const vehicleId = VALID_VEHICLE_IDS.includes(Number(data.vehicleTypeId))
     ? Number(data.vehicleTypeId)
     : DEFAULT_BORZO_VEHICLE;
 
   const payload = {
     matter: data.matter,
     vehicle_type_id: vehicleId,
+    total_weight_kg: Number(data.package?.weight || 0),
+    insurance_amount: data.package?.declaredValue
+      ? String(Number(data.package.declaredValue).toFixed(2))
+      : "0.00",
     points: [{ address: data.pickup.address }, { address: data.drop.address }],
   };
+
   if (data.deliveryType === "EOD") {
     payload.type = "endofday";
+    payload.total_weight_kg = Number(data.package?.weight || 1);
+    delete payload.vehicle_type_id;
   }
 
   if (data.deliveryType === "SCHEDULED") {
@@ -31,6 +38,9 @@ const mapCalculatePayload = (data) => {
 
     const scheduled = new Date(data.scheduledAt);
 
+    if (scheduled.getTime() <= Date.now()) {
+      throw new Error("Scheduled time must be future");
+    }
     payload.type = "standard";
 
     payload.points[0].required_start_datetime = scheduled.toISOString();
@@ -49,9 +59,17 @@ const mapCreateOrderPayload = (data) => {
   if (!data.customer?.phone) {
     throw new Error("customer.phone is required");
   }
-
   if (!data.pickup?.address || !data.drop?.address) {
     throw new Error("pickup.address and drop.address are required");
+  }
+
+  if (
+    !data.pickup?.lat ||
+    !data.pickup?.lng ||
+    !data.drop?.lat ||
+    !data.drop?.lng
+  ) {
+    throw new Error("Valid pickup and drop coordinates are required");
   }
 
   const pickupPoint = {
@@ -62,6 +80,7 @@ const mapCreateOrderPayload = (data) => {
       name: data.customer.name || null,
       phone: data.customer.phone,
     },
+    note: data.pickup?.notes || data.pickupNotes || null,
   };
 
   const dropPoint = {
@@ -72,6 +91,7 @@ const mapCreateOrderPayload = (data) => {
       name: data.customer.name || null,
       phone: data.customer.phone,
     },
+    note: data.drop?.notes || data.stops?.[1]?.notes || null,
   };
 
   //  COD Injection
@@ -79,21 +99,26 @@ const mapCreateOrderPayload = (data) => {
     dropPoint.is_cod_cash_voucher_required = true;
     dropPoint.taking_amount = Number(data.cod.amount);
   }
+  const VALID_VEHICLE_IDS = [1, 2, 3, 5, 8];
 
-  const allowedVehicles = [DEFAULT_BORZO_VEHICLE];
-
-  const vehicleId = allowedVehicles.includes(Number(data.vehicleTypeId))
+  const vehicleId = VALID_VEHICLE_IDS.includes(Number(data.vehicleTypeId))
     ? Number(data.vehicleTypeId)
     : DEFAULT_BORZO_VEHICLE;
 
   const payload = {
     matter: data.matter,
     vehicle_type_id: vehicleId,
+    total_weight_kg: Number(data.package?.weight || 0),
+    insurance_amount: data.package?.declaredValue
+      ? String(Number(data.package.declaredValue).toFixed(2))
+      : "0.00",
     points: [pickupPoint, dropPoint],
   };
 
   if (data.deliveryType === "EOD") {
     payload.type = "endofday";
+    payload.total_weight_kg = Number(data.package?.weight || 1);
+    delete payload.vehicle_type_id;
   }
 
   if (data.deliveryType === "SCHEDULED") {
@@ -103,6 +128,9 @@ const mapCreateOrderPayload = (data) => {
 
     const scheduled = new Date(data.scheduledAt);
 
+    if (scheduled.getTime() <= Date.now()) {
+      throw new Error("Scheduled time must be future");
+    }
     // keep type as standard (or don't set at all)
     payload.type = "standard";
 
@@ -123,7 +151,6 @@ const mapEditPayload = (borzoOrderId, data, existingOrder) => {
     order_id: Number(borzoOrderId),
   };
 
-  // ✅ SAFE FIELDS
   if (data.matter) {
     payload.matter = data.matter;
   }
@@ -136,19 +163,41 @@ const mapEditPayload = (borzoOrderId, data, existingOrder) => {
     payload.vehicle_type_id = Number(data.vehicle_type_id);
   }
 
-  // ❗ CRITICAL: handle points correctly
   if (data.points && existingOrder?.rawProviderResponse?.order?.points) {
-    payload.points = data.points.map((p, index) => {
-      const existingPoint =
-        existingOrder.rawProviderResponse.order.points[index];
+    payload.points = data.points
+      .map((p, index) => {
+        const existingPoint =
+          existingOrder.rawProviderResponse.order.points[index];
 
-      return {
-        point_id: existingPoint.point_id, // REQUIRED by Borzo
-        address: p.address,
-        latitude: p.latitude,
-        longitude: p.longitude,
-      };
-    });
+        if (!existingPoint) return null;
+
+        return {
+          point_id: existingPoint.point_id,
+          address: p.address,
+          latitude: String(p.latitude),
+          longitude: String(p.longitude),
+          contact_person: {
+            name: existingPoint.contact_person?.name || null,
+            phone: existingPoint.contact_person?.phone || null,
+          },
+          packages: (existingPoint.packages || []).map((pkg) => ({
+            order_package_id: pkg.order_package_id,
+            items_count: pkg.items_count,
+          })),
+          note: p.note || existingPoint.note || null,
+          taking_amount: String(
+            Number(p.taking_amount || existingPoint.taking_amount || 0).toFixed(
+              2,
+            ),
+          ),
+          buyout_amount: String(
+            Number(p.buyout_amount || existingPoint.buyout_amount || 0).toFixed(
+              2,
+            ),
+          ),
+        };
+      })
+      .filter(Boolean);
   }
 
   return payload;

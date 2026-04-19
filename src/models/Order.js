@@ -84,7 +84,7 @@ const orderSchema = new mongoose.Schema(
     payment: {
       method: {
         type: String,
-        enum: ["CASH", "CARD", "WALLET"],
+        enum: ["CASH", "BANK_CARD", "WALLET"],
         default: "CASH",
       },
       feePayer: {
@@ -123,8 +123,12 @@ const orderSchema = new mongoose.Schema(
     },
 
     pricing: {
+      baseAmount: { type: Number },
+      adjustedAmount: { type: Number },
+      insurance: { type: Number, default: 0 },
       amount: { type: Number, required: true },
       currency: { type: String, required: true },
+      calculatedAt: { type: Date },
     },
 
     declaredValue: {
@@ -193,6 +197,20 @@ const orderSchema = new mongoose.Schema(
     rawProviderResponse: {
       type: Object,
       required: true,
+    },
+
+    pricingSnapshot: {
+      basePrice: Number,
+      marginPercent: Number,
+      platformFee: Number,
+      handlingFee: Number,
+      surgeMultiplier: Number,
+      surgeApplied: Boolean,
+      vehicleType: String,
+      vehicleMultiplier: Number,
+      insurancePercent: Number,
+      codFee: Number,
+      finalPrice: Number,
     },
 
     codSettled: {

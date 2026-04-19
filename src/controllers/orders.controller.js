@@ -25,8 +25,25 @@ const { sendSuccess, sendError } = require("../utils/response");
 
 const createOrder = async (req, res, next) => {
   try {
-    if (!req.body.customer || !req.body.pickup || !req.body.drop) {
+    const { customer, pickup, drop, matter, deliveryType, payment } = req.body;
+
+    if (!customer || !pickup || !drop) {
       return sendError(res, "Missing required order data", 400);
+    }
+
+    if (!matter) {
+      return sendError(res, "Package details are required", 400);
+    }
+
+    if (!["NOW", "EOD", "SCHEDULED"].includes(deliveryType)) {
+      return sendError(res, "Invalid delivery type", 400);
+    }
+
+    if (
+      payment?.method &&
+      !["CASH", "BANK_CARD", "WALLET"].includes(payment.method)
+    ) {
+      return sendError(res, "Invalid payment method", 400);
     }
 
     const order = await createOrderService({
@@ -36,20 +53,13 @@ const createOrder = async (req, res, next) => {
 
     return sendSuccess(res, order, "Order created", 201);
   } catch (error) {
-    next(error);
+    return sendError(
+      res,
+      error.message || "Unable to create order at this time",
+      400,
+    );
   }
 };
-
-// GET ALL ORDERS
-
-// const getOrders = async (req, res, next) => {
-//   try {
-//     const orders = await getOrdersService(req.user._id);
-//     return sendSuccess(res, orders, "Orders fetched");
-//   } catch (error) {
-//     next(error);
-//   }
-// };
 
 const getOrders = async (req, res, next) => {
   try {
