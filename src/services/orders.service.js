@@ -170,7 +170,7 @@ const createOrderService = async (data) => {
   let createPayload;
 
   // END-OF-DAY FLOW
-  if (data.orderType === "END_OF_DAY") {
+  if (data.deliveryType === "END_OF_DAY") {
     createPayload = {
       order_id: priceResponse.order.order_id,
     };
@@ -288,13 +288,25 @@ const getOrdersService = async (userId, query = {}) => {
     filter.user = userId;
   }
 
-  if (query.status) {
+  if (query.statuses) {
+    filter.status = {
+      $in: String(query.statuses)
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean),
+    };
+  } else if (query.status) {
     if (query.status === "ACTIVE") {
       filter.status = {
         $in: ["CREATED", "ASSIGNED", "PICKED_UP", "IN_TRANSIT"],
       };
-    } else if (query.status.includes(",")) {
-      filter.status = { $in: query.status.split(",") };
+    } else if (String(query.status).includes(",")) {
+      filter.status = {
+        $in: String(query.status)
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean),
+      };
     } else {
       filter.status = query.status;
     }
@@ -315,24 +327,28 @@ const getOrdersService = async (userId, query = {}) => {
   const sortBy = query.sortBy || "createdAt";
   const sortOrder = query.sortOrder === "asc" ? 1 : -1;
 
+  const baseFilter = isAdmin ? {} : { user: userId };
+
   const [orders, total, active, delivered, cancelled] = await Promise.all([
     Order.find(filter)
       .sort({ [sortBy]: sortOrder })
       .skip(skip)
       .limit(limit),
 
-    Order.countDocuments(filter),
+    Order.countDocuments(baseFilter),
+
     Order.countDocuments({
-      ...filter,
+      ...baseFilter,
       status: { $in: ["CREATED", "ASSIGNED", "PICKED_UP", "IN_TRANSIT"] },
     }),
 
     Order.countDocuments({
-      ...filter,
+      ...baseFilter,
       status: "DELIVERED",
     }),
+
     Order.countDocuments({
-      ...filter,
+      ...baseFilter,
       status: "CANCELLED",
     }),
   ]);

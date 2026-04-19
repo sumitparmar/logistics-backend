@@ -35,7 +35,7 @@ const createOrder = async (req, res, next) => {
       return sendError(res, "Package details are required", 400);
     }
 
-    if (!["NOW", "EOD", "SCHEDULED"].includes(deliveryType)) {
+    if (!["NOW", "EOD", "END_OF_DAY", "SCHEDULED"].includes(deliveryType)) {
       return sendError(res, "Invalid delivery type", 400);
     }
 

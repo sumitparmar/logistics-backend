@@ -25,7 +25,7 @@ const mapCalculatePayload = (data) => {
     points: [{ address: data.pickup.address }, { address: data.drop.address }],
   };
 
-  if (data.deliveryType === "EOD") {
+  if (data.deliveryType === "EOD" || data.deliveryType === "END_OF_DAY") {
     payload.type = "endofday";
     payload.total_weight_kg = Number(data.package?.weight || 1);
     delete payload.vehicle_type_id;
@@ -114,8 +114,7 @@ const mapCreateOrderPayload = (data) => {
       : "0.00",
     points: [pickupPoint, dropPoint],
   };
-
-  if (data.deliveryType === "EOD") {
+  if (data.deliveryType === "EOD" || data.deliveryType === "END_OF_DAY") {
     payload.type = "endofday";
     payload.total_weight_kg = Number(data.package?.weight || 1);
     delete payload.vehicle_type_id;
