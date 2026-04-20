@@ -705,7 +705,6 @@ const editOrderService = async (id, userId, data) => {
         baseAmount,
         adjustedAmount,
         insurance: order.pricing?.insurance || 0,
-        insurance: 0,
         amount: finalAmount,
         currency: process.env.CURRENCY,
         calculatedAt: new Date(),
