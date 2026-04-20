@@ -31,6 +31,10 @@ const {
   createBulkOrders,
 } = require("../controllers/orders.controller");
 
+// -----------------------------------------------
+// STATIC / NON-PARAM ROUTES FIRST
+// -----------------------------------------------
+
 // CREATE
 router.post(
   "/create",
@@ -40,27 +44,19 @@ router.post(
   createOrder,
 );
 
+// CALCULATE
+router.post("/calculate", validate(calculateOrderSchema), calculateOrder);
+
+// BULK
+router.post("/bulk", protect, createBulkOrders);
+
 // LIST
 router.get("/list", protect, getOrders);
 
-// SINGLE
-// router.get("/:id", protect, getOrderById);
-router.get("/:id", protect, getOrderById);
-router.get("/:id/courier", protect, getCourierInfo);
+// -----------------------------------------------
+// PROVIDER ROUTES — must come before /:id routes
+// -----------------------------------------------
 
-// ACTIONS
-router.post("/:id/cancel", protect, cancelOrder);
-
-router.get("/:id/sync", protect, allowRoles("admin"), syncOrder);
-router.post("/calculate", validate(calculateOrderSchema), calculateOrder);
-
-router.post("/:id/edit", protect, editOrder);
-router.post("/bulk", protect, createBulkOrders);
-router.get("/:id/history", protect, getProviderHistory);
-
-router.get("/:id/pricing-breakdown", protect, getPricingBreakdown);
-
-// PROVIDER
 router.get("/provider/list", protect, allowRoles("admin"), listProviderOrders);
 
 router.get(
@@ -74,17 +70,35 @@ router.get("/provider/bank-cards", protect, allowRoles("admin"), getBankCards);
 
 router.get("/provider/labels", protect, allowRoles("admin"), getLabels);
 
-router.get("/:id/tracking", getTracking);
-
-router.get("/:id/pod", protect, getPOD);
-
-router.get("/:id/documents", protect, getDocuments);
-
 router.get(
   "/provider/:orderId",
   protect,
   allowRoles("admin"),
   getProviderOrder,
 );
+
+// -----------------------------------------------
+// DYNAMIC /:id ROUTES — always last
+// -----------------------------------------------
+
+router.get("/:id", protect, getOrderById);
+
+router.get("/:id/courier", protect, getCourierInfo);
+
+router.get("/:id/sync", protect, allowRoles("admin"), syncOrder);
+
+router.get("/:id/history", protect, getProviderHistory);
+
+router.get("/:id/pricing-breakdown", protect, getPricingBreakdown);
+
+router.get("/:id/tracking", getTracking); // public — no auth required
+
+router.get("/:id/pod", protect, getPOD);
+
+router.get("/:id/documents", protect, getDocuments);
+
+router.post("/:id/cancel", protect, cancelOrder);
+
+router.post("/:id/edit", protect, editOrder);
 
 module.exports = router;

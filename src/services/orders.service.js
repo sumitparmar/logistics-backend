@@ -94,9 +94,20 @@ const createOrderService = async (data) => {
   const validVehicle = vehicles.find(
     (v) => String(v.id) === String(data.vehicleTypeId),
   );
-
   if (!validVehicle) {
     const err = new Error("Invalid vehicle type");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  // Weight validation
+  if (
+    validVehicle.maxWeightKg &&
+    Number(data.package?.weight) > validVehicle.maxWeightKg
+  ) {
+    const err = new Error(
+      `Weight ${data.package?.weight}kg exceeds ${validVehicle.name} limit of ${validVehicle.maxWeightKg}kg`,
+    );
     err.statusCode = 400;
     throw err;
   }
@@ -774,7 +785,24 @@ const getCourierInfoService = async (id, userId) => {
     throw err;
   }
 
-  return response?.courier || null;
+  if (!response?.courier) return null;
+
+  const courier = response.courier;
+
+  //  DB mein bhi location save karo agar available hai
+  if (courier.latitude && courier.longitude) {
+    await Order.findByIdAndUpdate(id, {
+      "courier.location.lat": Number(courier.latitude),
+      "courier.location.lng": Number(courier.longitude),
+      "courier.name": courier.name || null,
+      "courier.surname": courier.surname || null,
+      "courier.phone": courier.phone || null,
+      "courier.photoUrl": courier.photo_url || null,
+      "courier.courierId": courier.courier_id || null,
+    });
+  }
+
+  return courier;
 };
 
 // GET PROVIDER CLIENT PROFILE

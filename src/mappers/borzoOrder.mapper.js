@@ -41,6 +41,7 @@ const mapCalculatePayload = (data) => {
     if (scheduled.getTime() <= Date.now()) {
       throw new Error("Scheduled time must be future");
     }
+
     payload.type = "standard";
 
     payload.points[0].required_start_datetime = scheduled.toISOString();
@@ -48,6 +49,7 @@ const mapCalculatePayload = (data) => {
       scheduled.getTime() + 30 * 60 * 1000,
     ).toISOString();
   }
+
   return payload;
 };
 
@@ -59,6 +61,7 @@ const mapCreateOrderPayload = (data) => {
   if (!data.customer?.phone) {
     throw new Error("customer.phone is required");
   }
+
   if (!data.pickup?.address || !data.drop?.address) {
     throw new Error("pickup.address and drop.address are required");
   }
@@ -77,6 +80,7 @@ const mapCreateOrderPayload = (data) => {
     latitude: data.pickup.lat || null,
     longitude: data.pickup.lng || null,
     contact_person: {
+      // Sender ka naam/phone pickup pe
       name: data.customer.name || null,
       phone: data.customer.phone,
     },
@@ -88,17 +92,20 @@ const mapCreateOrderPayload = (data) => {
     latitude: data.drop.lat || null,
     longitude: data.drop.lng || null,
     contact_person: {
-      name: data.customer.name || null,
-      phone: data.customer.phone,
+      // ✅ Receiver ka naam/phone drop pe
+      name:
+        data.stops?.[1]?.name || data.drop?.name || data.customer.name || null,
+      phone: data.stops?.[1]?.phone || data.drop?.phone || data.customer.phone,
     },
     note: data.drop?.notes || data.stops?.[1]?.notes || null,
   };
 
-  //  COD Injection
+  // COD Injection
   if (data.cod?.amount) {
     dropPoint.is_cod_cash_voucher_required = true;
     dropPoint.taking_amount = Number(data.cod.amount);
   }
+
   const VALID_VEHICLE_IDS = [1, 2, 3, 5, 8];
 
   const vehicleId = VALID_VEHICLE_IDS.includes(Number(data.vehicleTypeId))
@@ -114,6 +121,7 @@ const mapCreateOrderPayload = (data) => {
       : "0.00",
     points: [pickupPoint, dropPoint],
   };
+
   if (data.deliveryType === "EOD" || data.deliveryType === "END_OF_DAY") {
     payload.type = "endofday";
     payload.total_weight_kg = Number(data.package?.weight || 1);
@@ -130,13 +138,10 @@ const mapCreateOrderPayload = (data) => {
     if (scheduled.getTime() <= Date.now()) {
       throw new Error("Scheduled time must be future");
     }
-    // keep type as standard (or don't set at all)
+
     payload.type = "standard";
 
-    // apply timing on PICKUP point
     payload.points[0].required_start_datetime = scheduled.toISOString();
-
-    // recommended: 30 min window
     payload.points[0].required_finish_datetime = new Date(
       scheduled.getTime() + 30 * 60 * 1000,
     ).toISOString();
@@ -175,20 +180,27 @@ const mapEditPayload = (borzoOrderId, data, existingOrder) => {
           address: p.address,
           latitude: String(p.latitude),
           longitude: String(p.longitude),
+
+          // contact_person preserve karo — Borzo remove kar deta hai agar nahi bheja
           contact_person: {
             name: existingPoint.contact_person?.name || null,
             phone: existingPoint.contact_person?.phone || null,
           },
+
+          // packages preserve karo — Borzo delete kar deta hai agar nahi bheja
           packages: (existingPoint.packages || []).map((pkg) => ({
             order_package_id: pkg.order_package_id,
             items_count: pkg.items_count,
           })),
+
           note: p.note || existingPoint.note || null,
+
           taking_amount: String(
             Number(p.taking_amount || existingPoint.taking_amount || 0).toFixed(
               2,
             ),
           ),
+
           buyout_amount: String(
             Number(p.buyout_amount || existingPoint.buyout_amount || 0).toFixed(
               2,
