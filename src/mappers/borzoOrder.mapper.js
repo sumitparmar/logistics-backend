@@ -1,5 +1,11 @@
 const DEFAULT_BORZO_VEHICLE = 8;
 
+function toISTString(date) {
+  const pad = (n) => String(n).padStart(2, "0");
+  const d = new Date(date.getTime() + 330 * 60000);
+  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}T${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}+05:30`;
+}
+
 const mapCalculatePayload = (data) => {
   if (!data.matter) {
     throw new Error("matter is required");
@@ -9,7 +15,7 @@ const mapCalculatePayload = (data) => {
     throw new Error("pickup.address and drop.address are required");
   }
 
-  const VALID_VEHICLE_IDS = [1, 2, 3, 5, 8];
+  const VALID_VEHICLE_IDS = [8];
 
   const vehicleId = VALID_VEHICLE_IDS.includes(Number(data.vehicleTypeId))
     ? Number(data.vehicleTypeId)
@@ -44,10 +50,10 @@ const mapCalculatePayload = (data) => {
 
     payload.type = "standard";
 
-    payload.points[0].required_start_datetime = scheduled.toISOString();
-    payload.points[0].required_finish_datetime = new Date(
-      scheduled.getTime() + 30 * 60 * 1000,
-    ).toISOString();
+    payload.points[0].required_start_datetime = toISTString(scheduled);
+    payload.points[0].required_finish_datetime = toISTString(
+      new Date(scheduled.getTime() + 30 * 60 * 1000),
+    );
   }
 
   return payload;
@@ -103,10 +109,10 @@ const mapCreateOrderPayload = (data) => {
   // COD Injection
   if (data.cod?.amount) {
     dropPoint.is_cod_cash_voucher_required = true;
-    dropPoint.taking_amount = Number(data.cod.amount);
+    dropPoint.taking_amount = Number(data.cod.amount).toFixed(2);
   }
 
-  const VALID_VEHICLE_IDS = [1, 2, 3, 5, 8];
+  const VALID_VEHICLE_IDS = [8];
 
   const vehicleId = VALID_VEHICLE_IDS.includes(Number(data.vehicleTypeId))
     ? Number(data.vehicleTypeId)
@@ -141,10 +147,10 @@ const mapCreateOrderPayload = (data) => {
 
     payload.type = "standard";
 
-    payload.points[0].required_start_datetime = scheduled.toISOString();
-    payload.points[0].required_finish_datetime = new Date(
-      scheduled.getTime() + 30 * 60 * 1000,
-    ).toISOString();
+    payload.points[0].required_start_datetime = toISTString(scheduled);
+    payload.points[0].required_finish_datetime = toISTString(
+      new Date(scheduled.getTime() + 30 * 60 * 1000),
+    );
   }
 
   return payload;
@@ -168,6 +174,10 @@ const mapEditPayload = (borzoOrderId, data, existingOrder) => {
   }
 
   if (data.points && existingOrder?.rawProviderResponse?.order?.points) {
+    const isEndOfDay =
+      existingOrder?.deliveryType === "END_OF_DAY" ||
+      existingOrder?.deliveryType === "EOD";
+
     payload.points = data.points
       .map((p, index) => {
         const existingPoint =
@@ -175,38 +185,44 @@ const mapEditPayload = (borzoOrderId, data, existingOrder) => {
 
         if (!existingPoint) return null;
 
-        return {
+        const point = {
           point_id: existingPoint.point_id,
           address: p.address,
           latitude: String(p.latitude),
           longitude: String(p.longitude),
-
-          // contact_person preserve karo — Borzo remove kar deta hai agar nahi bheja
           contact_person: {
             name: existingPoint.contact_person?.name || null,
             phone: existingPoint.contact_person?.phone || null,
           },
-
-          // packages preserve karo — Borzo delete kar deta hai agar nahi bheja
           packages: (existingPoint.packages || []).map((pkg) => ({
             order_package_id: pkg.order_package_id,
             items_count: pkg.items_count,
           })),
-
           note: p.note || existingPoint.note || null,
-
           taking_amount: String(
             Number(p.taking_amount || existingPoint.taking_amount || 0).toFixed(
               2,
             ),
           ),
-
           buyout_amount: String(
             Number(p.buyout_amount || existingPoint.buyout_amount || 0).toFixed(
               2,
             ),
           ),
         };
+
+        if (!isEndOfDay) {
+          if (existingPoint.required_start_datetime) {
+            point.required_start_datetime =
+              existingPoint.required_start_datetime;
+          }
+          if (existingPoint.required_finish_datetime) {
+            point.required_finish_datetime =
+              existingPoint.required_finish_datetime;
+          }
+        }
+
+        return point;
       })
       .filter(Boolean);
   }

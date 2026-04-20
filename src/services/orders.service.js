@@ -178,16 +178,7 @@ const createOrderService = async (data) => {
 
     finalPrice: finalAmount,
   };
-  let createPayload;
-
-  // END-OF-DAY FLOW
-  if (data.deliveryType === "END_OF_DAY") {
-    createPayload = {
-      order_id: priceResponse.order.order_id,
-    };
-  } else {
-    createPayload = mapCreateOrderPayload(data);
-  }
+  let createPayload = mapCreateOrderPayload(data);
 
   const createResponse = await pulseService.createOrder(createPayload);
 
@@ -461,7 +452,9 @@ const cancelOrderService = async (id, userId) => {
 // SYNC ORDER
 
 const syncOrderService = async (id, userId) => {
-  const order = await Order.findById(id);
+  const order = userId
+    ? await Order.findOne({ _id: id, user: userId })
+    : await Order.findById(id);
   if (!order) throw new Error("Order not found");
   const response = await pulseService.getOrder(order.borzoOrderId);
 
@@ -557,8 +550,10 @@ const calculateOrderService = async (data) => {
 
   const response = await pulseService.calculateOrder(payload);
 
-  const baseAmount = Number(response.order.payment_amount || 0);
-
+  if (!response?.order?.payment_amount) {
+    throw new Error("Price calculation failed from provider");
+  }
+  const baseAmount = Number(response.order.payment_amount);
   // Get pricing config
   let pricingConfig = await AdminPricing.findOne({ isActive: true });
 
@@ -709,6 +704,7 @@ const editOrderService = async (id, userId, data) => {
       order.pricing = {
         baseAmount,
         adjustedAmount,
+        insurance: order.pricing?.insurance || 0,
         insurance: 0,
         amount: finalAmount,
         currency: process.env.CURRENCY,
@@ -862,13 +858,7 @@ const getTrackingService = async (id, userId) => {
     throw err;
   }
 
-  const response = await pulseService.getTracking(order.borzoOrderId);
-
-  if (!response?.is_successful || !response?.orders?.length) {
-    return { tracking_url: null };
-  }
-
-  const borzoOrder = response.orders[0];
+  const borzoOrder = await fetchBorzoOrder(order.borzoOrderId);
 
   const url =
     borzoOrder.points?.find((p) => p.tracking_url)?.tracking_url || null;
@@ -895,19 +885,7 @@ const getPODService = async (id, userId) => {
     throw err;
   }
 
-  const response = await pulseService.getTracking(order.borzoOrderId);
-
-  if (
-    !response?.is_successful ||
-    !response?.orders ||
-    response.orders.length === 0
-  ) {
-    const err = new Error("Failed to fetch POD");
-    err.statusCode = 400;
-    throw err;
-  }
-
-  const borzoOrder = response.orders[0];
+  const borzoOrder = await fetchBorzoOrder(order.borzoOrderId);
 
   const podPoint = borzoOrder.points?.find(
     (p) => p.place_photo_url || p.sign_photo_url,
@@ -928,19 +906,7 @@ const getDocumentsService = async (id, userId) => {
     throw err;
   }
 
-  const response = await pulseService.getTracking(order.borzoOrderId);
-
-  if (
-    !response?.is_successful ||
-    !response?.orders ||
-    response.orders.length === 0
-  ) {
-    const err = new Error("Failed to fetch documents");
-    err.statusCode = 400;
-    throw err;
-  }
-
-  const borzoOrder = response.orders[0];
+  const borzoOrder = await fetchBorzoOrder(order.borzoOrderId);
 
   return {
     waybillUrl: borzoOrder.waybill_document_url || null,
@@ -957,19 +923,7 @@ const getPricingBreakdownService = async (id, userId) => {
     throw err;
   }
 
-  const response = await pulseService.getTracking(order.borzoOrderId);
-
-  if (
-    !response?.is_successful ||
-    !response?.orders ||
-    response.orders.length === 0
-  ) {
-    const err = new Error("Failed to fetch pricing breakdown");
-    err.statusCode = 400;
-    throw err;
-  }
-
-  const borzoOrder = response.orders[0];
+  const borzoOrder = await fetchBorzoOrder(order.borzoOrderId);
 
   return {
     deliveryFeeAmount: borzoOrder.delivery_fee_amount || "0.00",
@@ -989,19 +943,7 @@ const getProviderHistoryService = async (id, userId) => {
     throw err;
   }
 
-  const response = await pulseService.getTracking(order.borzoOrderId);
-
-  if (
-    !response?.is_successful ||
-    !response?.orders ||
-    response.orders.length === 0
-  ) {
-    const err = new Error("Failed to fetch provider history");
-    err.statusCode = 400;
-    throw err;
-  }
-
-  const borzoOrder = response.orders[0];
+  const borzoOrder = await fetchBorzoOrder(order.borzoOrderId);
 
   return {
     orderId: borzoOrder.order_id,
@@ -1039,6 +981,14 @@ const createBulkOrdersService = async (orders, userId) => {
   }
 
   return results;
+};
+
+const fetchBorzoOrder = async (borzoOrderId) => {
+  const response = await pulseService.getTracking(borzoOrderId);
+  if (!response?.is_successful || !response?.orders?.length) {
+    throw new Error("Failed to fetch order from provider");
+  }
+  return response.orders[0];
 };
 
 module.exports = {

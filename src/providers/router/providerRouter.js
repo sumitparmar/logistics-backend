@@ -3,11 +3,20 @@ const healthStore = require("../providerHealth.store");
 
 class ProviderRouter {
   getAvailableProvider() {
-    const providers = listProviders();
+    const directBorzo =
+      getProvider("BORZO") || getProvider("borzo") || getProvider("Borzo");
+
+    if (directBorzo) {
+      return directBorzo;
+    }
+
+    const providers =
+      typeof listProviders === "function" ? listProviders() : [];
 
     for (const name of providers) {
-      if (healthStore.isUp(name)) {
-        return getProvider(name);
+      const provider = getProvider(name);
+      if (provider) {
+        return provider;
       }
     }
 
