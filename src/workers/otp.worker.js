@@ -29,7 +29,7 @@ otpQueue.process(CONCURRENCY, async (job) => {
           `[OTP WORKER] Email failed for ${phone}:`,
           emailError.message,
         );
-        // Do not throw here — SMS already succeeded
+        // Do not throw here because SMS already succeeded
       }
     }
 

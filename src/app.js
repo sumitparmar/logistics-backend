@@ -16,8 +16,6 @@ const apiLimiter = rateLimit({
   },
 });
 
-require("./config/redis");
-require("./workers/otp.worker");
 const errorHandler = require("./middlewares/errorHandler");
 const authRoutes = require("./routes/auth.routes");
 const ordersRoutes = require("./routes/orders.routes");

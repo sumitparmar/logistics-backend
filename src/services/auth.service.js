@@ -85,13 +85,15 @@ const loginUser = async (data) => {
   const { email, password, phone, otp } = data;
 
   if (email && password) {
-    let user = await User.findOne({ email }).select("+password");
+    let user = await User.findOne({ email })
+      .select("+password")
+      .populate("adminRole");
 
     if (!user) {
       throw new Error("Invalid credentials");
     }
 
-    //  SAFE REVIVE LOGIC (no break)
+    // Safe revive logic (no break)
     if (!user.isActive) {
       throw new Error("Your account has been deactivated. Contact support.");
     }
@@ -127,12 +129,22 @@ const generateToken = (user) => {
     { expiresIn: process.env.JWT_EXPIRES_IN },
   );
 
+  const adminRole = user.adminRole && {
+    id: user.adminRole._id || user.adminRole,
+    name: user.adminRole.name,
+  };
+
   return {
     token,
     user: {
       id: user._id,
+      name: user.name,
       email: user.email,
+      phone: user.phone,
       role: user.role,
+      deliveryMode: user.deliveryMode || null,
+      adminRole,
+      permissions: user.adminRole?.permissions || [],
     },
   };
 };
@@ -228,7 +240,7 @@ const verifyOtp = async (phone, otp) => {
 
   let user = await User.findOne({ phone });
 
-  // 🔥 SAFE REVIVE LOGIC
+  // Safe revive logic
   if (user && !user.isActive) {
     throw new Error("Your account has been deactivated. Contact support.");
   }

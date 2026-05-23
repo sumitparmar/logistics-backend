@@ -1,11 +1,15 @@
 const Queue = require("bull");
-const redis = require("../config/redis");
+
+const redisConfig = process.env.REDIS_URL
+  ? process.env.REDIS_URL
+  : {
+      host: process.env.REDIS_HOST || "127.0.0.1",
+      port: Number(process.env.REDIS_PORT) || 6379,
+      password: process.env.REDIS_PASSWORD || undefined,
+    };
 
 const otpQueue = new Queue("otpQueue", {
-  redis: {
-    host: "127.0.0.1",
-    port: 6379,
-  },
+  redis: redisConfig,
 });
 
 module.exports = otpQueue;
