@@ -21,9 +21,9 @@ const borzoWebhook = async (req, res) => {
     }
     // Idempotency (prevent duplicates)
     const fingerprint = webhookFingerprint({
-      type: "delivery",
-      order_id: payload?.delivery?.order_id,
-      status: payload?.delivery?.status,
+      type: "order",
+      order_id: payload?.order?.order_id,
+      status: payload?.order?.status,
     });
 
     try {
@@ -56,6 +56,9 @@ const borzoWebhook = async (req, res) => {
 
     //  Map + transition status
     const mappedStatus = mapBorzoStatus(borzoStatus);
+    if (!mappedStatus) {
+      return res.status(200).json({ received: true });
+    }
 
     order.status = transitionStatus(order.status, mappedStatus);
 
@@ -111,10 +114,10 @@ const borzoDeliveryWebhook = async (req, res) => {
 
     // Idempotency (prevent duplicates)
     const fingerprint = webhookFingerprint({
-      type: "order",
-      order_id: payload?.order?.order_id,
-      status:
-        payload?.order?.status || payload?.order?.points?.[0]?.delivery?.status,
+      type: "delivery",
+      order_id: payload?.delivery?.order_id,
+      delivery_id: payload?.delivery?.delivery_id,
+      status: payload?.delivery?.status,
     });
 
     try {
@@ -143,6 +146,9 @@ const borzoDeliveryWebhook = async (req, res) => {
 
     //  Map delivery status → internal status
     const mappedStatus = mapDeliveryStatus(delivery.status);
+    if (!mappedStatus) {
+      return res.status(200).json({ received: true });
+    }
     order.status = transitionStatus(order.status, mappedStatus);
 
     // COD Settlement on Delivered

@@ -8,6 +8,20 @@ const crypto = require("crypto");
 const redis = require("../config/redis");
 const otpQueue = require("../queues/otp.queue");
 
+const getEmailVerificationUrl = (token) => {
+  const frontendUrl = (process.env.FRONTEND_URL || "https://movekart.in").replace(
+    /\/+$/,
+    "",
+  );
+  const apiUrl = (
+    process.env.PUBLIC_API_URL ||
+    process.env.API_BASE_URL ||
+    `${frontendUrl}/api`
+  ).replace(/\/+$/, "");
+
+  return `${apiUrl}/auth/verify-email?token=${token}`;
+};
+
 const registerUser = async (data) => {
   const { name, email, phone, password, role } = data;
 
@@ -36,7 +50,7 @@ const registerUser = async (data) => {
 
     await existingUser.save();
 
-    const verificationUrl = `https://movekart.in/verify-email?token=${verificationToken}`;
+    const verificationUrl = getEmailVerificationUrl(verificationToken);
     await sendEmail(
       existingUser.email,
       "Verify your email - MoveKart Logistics",
@@ -67,7 +81,7 @@ const registerUser = async (data) => {
     emailVerificationExpires: Date.now() + 24 * 60 * 60 * 1000,
   });
 
-  const verificationUrl = `https://movekart.in/verify-email?token=${verificationToken}`;
+  const verificationUrl = getEmailVerificationUrl(verificationToken);
   await sendEmail(
     user.email,
     "Verify your email - MoveKart Logistics",

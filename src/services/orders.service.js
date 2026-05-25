@@ -2,7 +2,10 @@ const Order = require("../models/Order");
 const { getIO } = require("../config/socket");
 const pulseService = require("./pulse.service");
 const { transitionStatus } = require("../engines/status.engine");
-const { mapProviderError } = require("../utils/providerErrorMapper");
+const {
+  mapProviderError,
+  throwProviderError,
+} = require("../utils/providerErrorMapper");
 const { mapBorzoStatus } = require("../utils/statusMapper");
 
 const AdminPricing = require("../models/adminPricing.model");
@@ -114,7 +117,13 @@ const createOrderService = async (data) => {
 
   data.vehicleTypeId = data.vehicleTypeId || data.vehicleType;
   const calculatePayload = mapCalculatePayload(data);
-  const priceResponse = await pulseService.calculateOrder(calculatePayload);
+  let priceResponse;
+
+  try {
+    priceResponse = await pulseService.calculateOrder(calculatePayload);
+  } catch (err) {
+    throwProviderError(err);
+  }
 
   if (!priceResponse?.order?.payment_amount) {
     throw new Error("Price calculation failed");
@@ -180,7 +189,13 @@ const createOrderService = async (data) => {
   };
   let createPayload = mapCreateOrderPayload(data);
 
-  const createResponse = await pulseService.createOrder(createPayload);
+  let createResponse;
+
+  try {
+    createResponse = await pulseService.createOrder(createPayload);
+  } catch (err) {
+    throwProviderError(err);
+  }
 
   if (!createResponse?.is_successful) {
     const mapped = mapProviderError(createResponse);
@@ -548,7 +563,17 @@ const calculateOrderService = async (data) => {
 
   const payload = mapCalculatePayload(data);
 
-  const response = await pulseService.calculateOrder(payload);
+  let response;
+
+  try {
+    response = await pulseService.calculateOrder(payload);
+  } catch (err) {
+    throwProviderError(err);
+  }
+
+  if (!response?.is_successful) {
+    throwProviderError(response);
+  }
 
   if (!response?.order?.payment_amount) {
     throw new Error("Price calculation failed from provider");

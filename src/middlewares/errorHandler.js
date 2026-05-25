@@ -12,6 +12,10 @@ module.exports = (err, req, res, next) => {
     response.code = err.code; // provider / business error code
   }
 
+  if (err.details?.length) {
+    response.details = err.details;
+  }
+
   if (process.env.NODE_ENV !== "production") {
     response.stack = err.stack;
   }

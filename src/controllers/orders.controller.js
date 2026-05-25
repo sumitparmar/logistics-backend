@@ -41,7 +41,9 @@ const createOrder = async (req, res, next) => {
 
     if (
       payment?.method &&
-      !["CASH", "BANK_CARD", "WALLET"].includes(payment.method)
+      !["CASH", "BANK_CARD", "CARD", "WALLET", "BALANCE"].includes(
+        payment.method,
+      )
     ) {
       return sendError(res, "Invalid payment method", 400);
     }

@@ -5,14 +5,59 @@ const Joi = require("joi");
  */
 const calculateOrderSchema = Joi.object({
   matter: Joi.string().required(),
+  vehicleTypeId: Joi.number().optional(),
+  vehicleType: Joi.number().optional(),
+
+  deliveryType: Joi.string()
+    .valid("NOW", "EOD", "END_OF_DAY", "SCHEDULED")
+    .default("NOW"),
+
+  scheduledAt: Joi.string().when("deliveryType", {
+    is: "SCHEDULED",
+    then: Joi.required(),
+    otherwise: Joi.optional(),
+  }),
 
   pickup: Joi.object({
     address: Joi.string().required(),
+    lat: Joi.number().optional(),
+    lng: Joi.number().optional(),
   }).required(),
 
   drop: Joi.object({
     address: Joi.string().required(),
+    lat: Joi.number().optional(),
+    lng: Joi.number().optional(),
   }).required(),
+
+  stops: Joi.array()
+    .items(
+      Joi.object({
+        type: Joi.string().valid("PICKUP", "DROP").required(),
+        address: Joi.string().required(),
+        lat: Joi.number().optional(),
+        lng: Joi.number().optional(),
+        name: Joi.string().optional(),
+        phone: Joi.string().optional(),
+        notes: Joi.string().allow("", null).optional(),
+      }),
+    )
+    .optional(),
+
+  package: Joi.object({
+    weight: Joi.number().min(0).optional(),
+    category: Joi.string().optional(),
+    description: Joi.string().optional(),
+    declaredValue: Joi.number().min(0).optional(),
+  }).optional(),
+
+  payment: Joi.object({
+    method: Joi.string()
+      .valid("CASH", "BANK_CARD", "CARD", "WALLET", "BALANCE")
+      .default("CASH"),
+    bankCardId: Joi.number().optional(),
+    bank_card_id: Joi.number().optional(),
+  }).optional(),
 });
 
 const createOrderSchema = Joi.object({
@@ -23,7 +68,7 @@ const createOrderSchema = Joi.object({
 
   // NEW
   deliveryType: Joi.string()
-    .valid("NOW", "END_OF_DAY", "SCHEDULED")
+    .valid("NOW", "EOD", "END_OF_DAY", "SCHEDULED")
     .default("NOW"),
 
   scheduledAt: Joi.string().when("deliveryType", {
@@ -32,7 +77,7 @@ const createOrderSchema = Joi.object({
     otherwise: Joi.optional(),
   }),
   customer: Joi.object({
-    name: Joi.string().optional(),
+    name: Joi.string().required(),
     phone: Joi.string().required(),
   }).required(),
 
@@ -75,8 +120,12 @@ const createOrderSchema = Joi.object({
   }).optional(),
 
   payment: Joi.object({
-    method: Joi.string().valid("CASH", "CARD", "WALLET").default("CASH"),
+    method: Joi.string()
+      .valid("CASH", "BANK_CARD", "CARD", "WALLET", "BALANCE")
+      .default("CASH"),
     feePayer: Joi.string().valid("PICKUP", "DROP").default("DROP"),
+    bankCardId: Joi.number().optional(),
+    bank_card_id: Joi.number().optional(),
   }).optional(),
 
   // existing

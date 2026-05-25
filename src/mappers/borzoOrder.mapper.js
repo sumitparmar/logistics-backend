@@ -1,9 +1,110 @@
 const DEFAULT_BORZO_VEHICLE = 8;
+const VALID_BORZO_VEHICLE_IDS = [1, 2, 3, 5, 8];
+
+function normalizeBorzoPhone(phone) {
+  const digits = String(phone || "").replace(/\D/g, "");
+  if (digits.length === 10) return `91${digits}`;
+  if (digits.length === 12 && digits.startsWith("91")) return digits;
+  return digits;
+}
 
 function toISTString(date) {
   const pad = (n) => String(n).padStart(2, "0");
   const d = new Date(date.getTime() + 330 * 60000);
   return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}T${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}+05:30`;
+}
+
+function isEndOfDay(data) {
+  return data.deliveryType === "EOD" || data.deliveryType === "END_OF_DAY";
+}
+
+function resolveVehicleId(vehicleTypeId) {
+  const id = Number(vehicleTypeId);
+  return VALID_BORZO_VEHICLE_IDS.includes(id) ? id : DEFAULT_BORZO_VEHICLE;
+}
+
+function applyPaymentMethod(payload, payment = {}) {
+  const method = String(payment.method || "").toUpperCase();
+
+  if (!method || method === "CASH") {
+    return;
+  }
+
+  if (method === "BANK_CARD" || method === "CARD") {
+    if (!payment.bankCardId && !payment.bank_card_id) {
+      throw new Error("bankCardId is required for bank card payment");
+    }
+
+    payload.payment_method = "bank_card";
+    payload.bank_card_id = Number(payment.bankCardId || payment.bank_card_id);
+    return;
+  }
+
+  if (method === "WALLET" || method === "BALANCE") {
+    payload.payment_method = "balance";
+  }
+}
+
+function getDeliveryStops(data) {
+  const stopDrops = Array.isArray(data.stops)
+    ? data.stops.filter((stop) => stop.type === "DROP")
+    : [];
+
+  if (stopDrops.length) return stopDrops;
+
+  return [
+    {
+      ...data.drop,
+      name: data.drop?.name || data.customer?.name || null,
+      phone: data.drop?.phone || data.customer?.phone || null,
+      notes: data.drop?.notes || null,
+    },
+  ];
+}
+
+function assertEndOfDayPointCount(data) {
+  if (isEndOfDay(data) && getDeliveryStops(data).length !== 1) {
+    throw new Error("End-of-day delivery supports exactly one drop address");
+  }
+}
+
+function mapDeliveryStops(data, { includeContacts = false } = {}) {
+  return getDeliveryStops(data).map((stop) => {
+    const point = {
+      address: stop.address,
+    };
+
+    if (stop.lat !== undefined && stop.lat !== null) point.latitude = stop.lat;
+    if (stop.lng !== undefined && stop.lng !== null) point.longitude = stop.lng;
+
+    if (includeContacts) {
+      point.contact_person = {
+        name: stop.name || data.customer?.name || null,
+        phone: normalizeBorzoPhone(stop.phone || data.customer?.phone),
+      };
+      point.note = stop.notes || stop.note || null;
+    }
+
+    return point;
+  });
+}
+
+function applySchedule(payload, scheduledAt) {
+  if (!scheduledAt) {
+    throw new Error("scheduledAt is required for scheduled delivery");
+  }
+
+  const scheduled = new Date(scheduledAt);
+
+  if (Number.isNaN(scheduled.getTime()) || scheduled.getTime() <= Date.now()) {
+    throw new Error("Scheduled time must be future");
+  }
+
+  payload.type = "standard";
+  payload.points[0].required_start_datetime = toISTString(scheduled);
+  payload.points[0].required_finish_datetime = toISTString(
+    new Date(scheduled.getTime() + 30 * 60 * 1000),
+  );
 }
 
 const mapCalculatePayload = (data) => {
@@ -15,45 +116,31 @@ const mapCalculatePayload = (data) => {
     throw new Error("pickup.address and drop.address are required");
   }
 
-  const VALID_VEHICLE_IDS = [8];
-
-  const vehicleId = VALID_VEHICLE_IDS.includes(Number(data.vehicleTypeId))
-    ? Number(data.vehicleTypeId)
-    : DEFAULT_BORZO_VEHICLE;
+  assertEndOfDayPointCount(data);
 
   const payload = {
     matter: data.matter,
-    vehicle_type_id: vehicleId,
+    vehicle_type_id: resolveVehicleId(data.vehicleTypeId),
     total_weight_kg: Number(data.package?.weight || 0),
     insurance_amount: data.package?.declaredValue
       ? String(Number(data.package.declaredValue).toFixed(2))
       : "0.00",
-    points: [{ address: data.pickup.address }, { address: data.drop.address }],
+    points: [
+      { address: data.pickup.address },
+      ...mapDeliveryStops(data, { includeContacts: false }),
+    ],
   };
 
-  if (data.deliveryType === "EOD" || data.deliveryType === "END_OF_DAY") {
+  applyPaymentMethod(payload, data.payment);
+
+  if (isEndOfDay(data)) {
     payload.type = "endofday";
     payload.total_weight_kg = Number(data.package?.weight || 1);
     delete payload.vehicle_type_id;
   }
 
   if (data.deliveryType === "SCHEDULED") {
-    if (!data.scheduledAt) {
-      throw new Error("scheduledAt is required for scheduled delivery");
-    }
-
-    const scheduled = new Date(data.scheduledAt);
-
-    if (scheduled.getTime() <= Date.now()) {
-      throw new Error("Scheduled time must be future");
-    }
-
-    payload.type = "standard";
-
-    payload.points[0].required_start_datetime = toISTString(scheduled);
-    payload.points[0].required_finish_datetime = toISTString(
-      new Date(scheduled.getTime() + 30 * 60 * 1000),
-    );
+    applySchedule(payload, data.scheduledAt);
   }
 
   return payload;
@@ -72,85 +159,63 @@ const mapCreateOrderPayload = (data) => {
     throw new Error("pickup.address and drop.address are required");
   }
 
+  assertEndOfDayPointCount(data);
+
+  const deliveryPoints = mapDeliveryStops(data, { includeContacts: true });
+
+  if (!data.pickup?.lat || !data.pickup?.lng) {
+    throw new Error("Valid pickup coordinates are required");
+  }
+
   if (
-    !data.pickup?.lat ||
-    !data.pickup?.lng ||
-    !data.drop?.lat ||
-    !data.drop?.lng
+    deliveryPoints.some(
+      (point) =>
+        point.latitude === undefined ||
+        point.latitude === null ||
+        point.longitude === undefined ||
+        point.longitude === null,
+    )
   ) {
-    throw new Error("Valid pickup and drop coordinates are required");
+    throw new Error("Valid coordinates are required for every drop address");
   }
 
   const pickupPoint = {
     address: data.pickup.address,
-    latitude: data.pickup.lat || null,
-    longitude: data.pickup.lng || null,
+    latitude: data.pickup.lat,
+    longitude: data.pickup.lng,
     contact_person: {
-      // Sender ka naam/phone pickup pe
       name: data.customer.name || null,
-      phone: data.customer.phone,
+      phone: normalizeBorzoPhone(data.customer.phone),
     },
     note: data.pickup?.notes || data.pickupNotes || null,
   };
 
-  const dropPoint = {
-    address: data.drop.address,
-    latitude: data.drop.lat || null,
-    longitude: data.drop.lng || null,
-    contact_person: {
-      // ✅ Receiver ka naam/phone drop pe
-      name:
-        data.stops?.[1]?.name || data.drop?.name || data.customer.name || null,
-      phone: data.stops?.[1]?.phone || data.drop?.phone || data.customer.phone,
-    },
-    note: data.drop?.notes || data.stops?.[1]?.notes || null,
-  };
-
-  // COD Injection
   if (data.cod?.amount) {
-    dropPoint.is_cod_cash_voucher_required = true;
-    dropPoint.taking_amount = Number(data.cod.amount).toFixed(2);
+    const codPoint = deliveryPoints[deliveryPoints.length - 1];
+    codPoint.is_cod_cash_voucher_required = true;
+    codPoint.taking_amount = Number(data.cod.amount).toFixed(2);
   }
-
-  const VALID_VEHICLE_IDS = [8];
-
-  const vehicleId = VALID_VEHICLE_IDS.includes(Number(data.vehicleTypeId))
-    ? Number(data.vehicleTypeId)
-    : DEFAULT_BORZO_VEHICLE;
 
   const payload = {
     matter: data.matter,
-    vehicle_type_id: vehicleId,
+    vehicle_type_id: resolveVehicleId(data.vehicleTypeId),
     total_weight_kg: Number(data.package?.weight || 0),
     insurance_amount: data.package?.declaredValue
       ? String(Number(data.package.declaredValue).toFixed(2))
       : "0.00",
-    points: [pickupPoint, dropPoint],
+    points: [pickupPoint, ...deliveryPoints],
   };
 
-  if (data.deliveryType === "EOD" || data.deliveryType === "END_OF_DAY") {
+  applyPaymentMethod(payload, data.payment);
+
+  if (isEndOfDay(data)) {
     payload.type = "endofday";
     payload.total_weight_kg = Number(data.package?.weight || 1);
     delete payload.vehicle_type_id;
   }
 
   if (data.deliveryType === "SCHEDULED") {
-    if (!data.scheduledAt) {
-      throw new Error("scheduledAt is required");
-    }
-
-    const scheduled = new Date(data.scheduledAt);
-
-    if (scheduled.getTime() <= Date.now()) {
-      throw new Error("Scheduled time must be future");
-    }
-
-    payload.type = "standard";
-
-    payload.points[0].required_start_datetime = toISTString(scheduled);
-    payload.points[0].required_finish_datetime = toISTString(
-      new Date(scheduled.getTime() + 30 * 60 * 1000),
-    );
+    applySchedule(payload, data.scheduledAt);
   }
 
   return payload;
@@ -174,14 +239,13 @@ const mapEditPayload = (borzoOrderId, data, existingOrder) => {
   }
 
   if (data.points && existingOrder?.rawProviderResponse?.order?.points) {
-    const isEndOfDay =
+    const isExistingEndOfDay =
       existingOrder?.deliveryType === "END_OF_DAY" ||
       existingOrder?.deliveryType === "EOD";
 
     payload.points = data.points
       .map((p, index) => {
-        const existingPoint =
-          existingOrder.rawProviderResponse.order.points[index];
+        const existingPoint = existingOrder.rawProviderResponse.order.points[index];
 
         if (!existingPoint) return null;
 
@@ -192,7 +256,7 @@ const mapEditPayload = (borzoOrderId, data, existingOrder) => {
           longitude: String(p.longitude),
           contact_person: {
             name: existingPoint.contact_person?.name || null,
-            phone: existingPoint.contact_person?.phone || null,
+            phone: normalizeBorzoPhone(existingPoint.contact_person?.phone),
           },
           packages: (existingPoint.packages || []).map((pkg) => ({
             order_package_id: pkg.order_package_id,
@@ -211,7 +275,7 @@ const mapEditPayload = (borzoOrderId, data, existingOrder) => {
           ),
         };
 
-        if (!isEndOfDay) {
+        if (!isExistingEndOfDay) {
           if (existingPoint.required_start_datetime) {
             point.required_start_datetime =
               existingPoint.required_start_datetime;
