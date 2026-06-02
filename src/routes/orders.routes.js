@@ -29,6 +29,7 @@ const {
   getPricingBreakdown,
   getProviderHistory,
   createBulkOrders,
+  getPublicTrackingOrder,
 } = require("../controllers/orders.controller");
 
 // -----------------------------------------------
@@ -52,6 +53,9 @@ router.post("/bulk", protect, createBulkOrders);
 
 // LIST
 router.get("/list", protect, getOrders);
+
+// PUBLIC TRACKING SUMMARY
+router.get("/track/:id", getPublicTrackingOrder);
 
 // -----------------------------------------------
 // PROVIDER ROUTES — must come before /:id routes

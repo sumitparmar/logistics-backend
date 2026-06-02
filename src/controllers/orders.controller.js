@@ -2,6 +2,7 @@ const {
   createOrderService,
   getOrdersService,
   getOrderByIdService,
+  getPublicTrackingOrderService,
   cancelOrderService,
   syncOrderService,
   editOrderService,
@@ -90,6 +91,15 @@ const getOrderById = async (req, res, next) => {
     }
 
     return sendSuccess(res, order, "Order fetched");
+  } catch (error) {
+    next(error);
+  }
+};
+
+const getPublicTrackingOrder = async (req, res, next) => {
+  try {
+    const order = await getPublicTrackingOrderService(req.params.id);
+    return sendSuccess(res, order, "Tracking order fetched");
   } catch (error) {
     next(error);
   }
@@ -286,6 +296,7 @@ module.exports = {
   createOrder,
   getOrders,
   getOrderById,
+  getPublicTrackingOrder,
   cancelOrder,
   syncOrder,
   calculateOrder,

@@ -11,6 +11,7 @@ const ALL_PERMISSIONS = Object.values(adminPermissions).flatMap((module) =>
 const {
   createAdminNotification,
 } = require("../services/adminNotification.service");
+const { emitOrderUpdate } = require("../services/realtime.service");
 
 const getProviderHealth = async (req, res) => {
   return res.json({
@@ -338,7 +339,7 @@ const getOrders = async (req, res) => {
 
     // PROVIDER FILTER (SAFE ADDITION)
     if (provider) {
-      filter.provider = provider;
+      filter.provider = String(provider).toUpperCase();
     }
 
     // SEARCH FILTER
@@ -373,7 +374,7 @@ const getOrders = async (req, res) => {
     const [orders, filteredTotal, globalTotal] = await Promise.all([
       Order.find(filter)
         .select(
-          "_id borzoOrderId customer pricing status provider createdAt courier pickup drop",
+          "_id borzoOrderId customer pricing status provider payment cod codSettled createdAt courier pickup drop",
         )
         .sort({ [sortField]: sortDirection })
         .skip(skip)
@@ -398,12 +399,14 @@ const getOrders = async (req, res) => {
       IN_PROGRESS: 0,
       DELIVERED: 0,
       CANCELLED: 0,
+      FAILED: 0,
     };
 
     statusAggregation.forEach((item) => {
       if (item._id === "CREATED") statusCounts.CREATED = item.count;
       if (item._id === "DELIVERED") statusCounts.DELIVERED = item.count;
       if (item._id === "CANCELLED") statusCounts.CANCELLED = item.count;
+      if (item._id === "FAILED") statusCounts.FAILED = item.count;
 
       if (
         item._id === "ASSIGNED" ||
@@ -775,18 +778,7 @@ const updateOrderStatus = async (req, res) => {
       });
     }
 
-    const io = getIO();
-
-    io.to(`user:${savedOrder.user}`).emit("order-status-update", {
-      orderId: savedOrder._id,
-      status: savedOrder.status,
-    });
-
-    io.to("admin").emit("admin-order-update", {
-      orderId: savedOrder._id,
-      status: savedOrder.status,
-      data: savedOrder,
-    });
+    emitOrderUpdate(savedOrder.user, savedOrder, { admin: true });
 
     //  END
 
@@ -813,11 +805,13 @@ const cancelOrder = async (req, res) => {
     order.status = "CANCELLED";
     order.cancelledAt = new Date();
 
-    await order.save();
+    const savedOrder = await order.save();
+
+    emitOrderUpdate(savedOrder.user, savedOrder, { admin: true });
 
     res.json({
       success: true,
-      data: order,
+      data: savedOrder,
     });
   } catch (err) {
     console.error(err);

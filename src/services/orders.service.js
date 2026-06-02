@@ -1,5 +1,4 @@
 const Order = require("../models/Order");
-const { getIO } = require("../config/socket");
 const pulseService = require("./pulse.service");
 const { transitionStatus } = require("../engines/status.engine");
 const {
@@ -17,7 +16,14 @@ const {
   mapEditPayload,
 } = require("../mappers/borzoOrder.mapper");
 const { getVehicleTypes } = require("./providerCatalog.service");
+const {
+  notifyOrderCreated,
+  notifyOrderDelivered,
+} = require("./deliveryNotification.service");
+const { emitOrderUpdate } = require("./realtime.service");
 const mongoose = require("mongoose");
+
+const toMoneyNumber = (value) => Number(Number(value || 0).toFixed(2));
 
 // CREATE ORDER
 
@@ -125,21 +131,18 @@ const createOrderService = async (data) => {
     throwProviderError(err);
   }
 
+  if (!priceResponse?.is_successful) {
+    throwProviderError(priceResponse);
+  }
+
   if (!priceResponse?.order?.payment_amount) {
     throw new Error("Price calculation failed");
   }
 
-  const baseAmount = Number(
-    Number(priceResponse.order.payment_amount || 0).toFixed(2),
+  const baseAmount = toMoneyNumber(priceResponse.order.payment_amount);
+  const insuranceCharge = toMoneyNumber(
+    priceResponse.order.insurance_fee_amount,
   );
-
-  const declaredValue = data.package?.declaredValue || 0;
-
-  let insuranceCharge = 0;
-
-  if (declaredValue > 0) {
-    insuranceCharge = Math.round(2 + declaredValue * 0.01);
-  }
 
   let pricingConfig = await AdminPricing.findOne({ isActive: true });
 
@@ -162,8 +165,7 @@ const createOrderService = async (data) => {
     });
   }
 
-  // Step 2: add insurance AFTER pricing
-  const finalAmount = Number((adjustedAmount + insuranceCharge).toFixed(2));
+  const finalAmount = Number(adjustedAmount.toFixed(2));
 
   const snapshot = {
     basePrice: baseAmount,
@@ -270,16 +272,9 @@ const createOrderService = async (data) => {
 
   const savedOrder = await order.save();
 
-  const io = getIO();
-  io.to(`user:${savedOrder.user}`).emit("order-status-update", {
-    orderId: savedOrder._id,
-    status: savedOrder.status,
-  });
+  notifyOrderCreated(savedOrder).catch(() => {});
 
-  io.to("admin").emit("admin-order-update", {
-    orderId: savedOrder._id,
-    data: savedOrder,
-  });
+  emitOrderUpdate(savedOrder.user, savedOrder, { admin: true });
 
   setTimeout(async () => {
     try {
@@ -404,6 +399,100 @@ const getOrderByIdService = async (id, userId = null) => {
   return Order.findById(id);
 };
 
+const getPublicTrackingOrderService = async (id) => {
+  const query = mongoose.Types.ObjectId.isValid(id)
+    ? { $or: [{ _id: id }, { borzoOrderId: String(id) }] }
+    : { borzoOrderId: String(id) };
+  const order = await Order.findOne(query);
+
+  if (!order) {
+    const err = new Error("Order not found");
+    err.statusCode = 404;
+    throw err;
+  }
+
+  const maskPhone = (phone) => {
+    const value = String(phone || "");
+    if (value.length <= 4) return value;
+    return `${value.slice(0, 2)}******${value.slice(-2)}`;
+  };
+
+  const providerOrder =
+    order.rawProviderResponse?.order || order.rawProviderResponse?.orders?.[0];
+  const sanitizedProviderOrder = providerOrder
+    ? {
+        order_id: providerOrder.order_id,
+        status: providerOrder.status,
+        matter: providerOrder.matter,
+        total_weight_kg: providerOrder.total_weight_kg,
+        vehicle_type_id: providerOrder.vehicle_type_id,
+        points: (providerOrder.points || []).map((point) => ({
+          address: point.address,
+          latitude: point.latitude,
+          longitude: point.longitude,
+          estimated_arrival_datetime: point.estimated_arrival_datetime,
+          tracking_url: point.tracking_url,
+          delivery: point.delivery
+            ? {
+                status: point.delivery.status,
+                status_datetime: point.delivery.status_datetime,
+              }
+            : null,
+        })),
+      }
+    : null;
+
+  return {
+    _id: order._id,
+    borzoOrderId: order.borzoOrderId,
+    status: order.status,
+    statusHistory: order.statusHistory,
+    provider: order.provider,
+    deliveryType: order.deliveryType,
+    createdAt: order.createdAt,
+    customer: {
+      name: order.customer?.name || null,
+      phone: maskPhone(order.customer?.phone),
+    },
+    pickup: {
+      address: order.pickup?.address || null,
+      lat: order.pickup?.lat || null,
+      lng: order.pickup?.lng || null,
+    },
+    drop: {
+      address: order.drop?.address || null,
+      lat: order.drop?.lat || null,
+      lng: order.drop?.lng || null,
+    },
+    stops: (order.stops || []).map((stop) => ({
+      type: stop.type,
+      address: stop.address,
+      lat: stop.lat,
+      lng: stop.lng,
+      name: stop.name,
+      phone: maskPhone(stop.phone),
+    })),
+    courier: order.courier
+      ? {
+          name: order.courier.name,
+          surname: order.courier.surname,
+          phone: maskPhone(order.courier.phone),
+          location: order.courier.location,
+        }
+      : null,
+    vehicle: order.vehicle,
+    vehicleTypeId: order.vehicleTypeId,
+    package: {
+      weight: order.package?.weight || null,
+      category: order.package?.category || null,
+      description: order.package?.description || null,
+    },
+    rawProviderResponse: sanitizedProviderOrder
+      ? { order: sanitizedProviderOrder }
+      : null,
+  };
+};
+
 // CANCEL ORDER
 
 const cancelOrderService = async (id, userId) => {
@@ -455,11 +544,7 @@ const cancelOrderService = async (id, userId) => {
 
   const savedOrder = await order.save();
 
-  const io = getIO();
-  io.to(`user:${savedOrder.user}`).emit("order-status-update", {
-    orderId: savedOrder._id,
-    status: savedOrder.status,
-  });
+  emitOrderUpdate(savedOrder.user, savedOrder);
 
   return savedOrder;
 };
@@ -511,6 +596,7 @@ const syncOrderService = async (id, userId) => {
     borzoOrder.points?.find((p) => p.delivery)?.delivery?.status || null;
 
   const mappedStatus = mapBorzoStatus(deliveryStatus || borzoStatus);
+  const wasDelivered = order.status === "DELIVERED";
 
   order.status = transitionStatus(order.status, mappedStatus);
 
@@ -538,17 +624,12 @@ const syncOrderService = async (id, userId) => {
   order.rawProviderResponse = response;
 
   const savedOrder = await order.save();
-  const io = getIO();
 
-  io.to("admin").emit("admin-order-update", {
-    orderId: savedOrder._id,
-    data: savedOrder,
-  });
+  if (mappedStatus === "DELIVERED" && !wasDelivered) {
+    notifyOrderDelivered(savedOrder).catch(() => {});
+  }
 
-  io.to(`user:${savedOrder.user}`).emit("order-status-update", {
-    orderId: savedOrder._id,
-    status: savedOrder.status,
-  });
+  emitOrderUpdate(savedOrder.user, savedOrder, { admin: true });
 
   return savedOrder;
 };
@@ -560,6 +641,33 @@ const calculateOrderService = async (data) => {
     weight: data.weight || 0,
     declaredValue: data.declaredValue || 0,
   };
+
+  data.vehicleTypeId = data.vehicleTypeId || data.vehicleType;
+
+  const isEndOfDay =
+    data.deliveryType === "EOD" || data.deliveryType === "END_OF_DAY";
+  const vehicles = await getVehicleTypes();
+  const validVehicle = isEndOfDay
+    ? null
+    : vehicles.find((vehicle) => String(vehicle.id) === String(data.vehicleTypeId));
+
+  if (!isEndOfDay && !validVehicle) {
+    const err = new Error("Invalid vehicle type");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  if (
+    !isEndOfDay &&
+    validVehicle.maxWeightKg &&
+    Number(data.package?.weight) > validVehicle.maxWeightKg
+  ) {
+    const err = new Error(
+      `Weight ${data.package?.weight}kg exceeds ${validVehicle.name} limit of ${validVehicle.maxWeightKg}kg`,
+    );
+    err.statusCode = 400;
+    throw err;
+  }
 
   const payload = mapCalculatePayload(data);
 
@@ -578,7 +686,8 @@ const calculateOrderService = async (data) => {
   if (!response?.order?.payment_amount) {
     throw new Error("Price calculation failed from provider");
   }
-  const baseAmount = Number(response.order.payment_amount);
+  const baseAmount = toMoneyNumber(response.order.payment_amount);
+  const insuranceCharge = toMoneyNumber(response.order.insurance_fee_amount);
   // Get pricing config
   let pricingConfig = await AdminPricing.findOne({ isActive: true });
 
@@ -601,9 +710,25 @@ const calculateOrderService = async (data) => {
     });
   }
 
+  const amount = Number(adjustedAmount.toFixed(2));
+
   return {
-    amount: adjustedAmount,
+    amount,
     currency: process.env.CURRENCY,
+    providerAmount: baseAmount,
+    insurance: insuranceCharge,
+    deliveryFee: Number(Math.max(amount - insuranceCharge, 0).toFixed(2)),
+    breakdown: {
+      deliveryFeeAmount: toMoneyNumber(response.order.delivery_fee_amount),
+      insuranceAmount: toMoneyNumber(response.order.insurance_amount),
+      insuranceFeeAmount: insuranceCharge,
+      weightFeeAmount: toMoneyNumber(response.order.weight_fee_amount),
+      codFeeAmount: toMoneyNumber(response.order.cod_fee_amount),
+      waitingFeeAmount: toMoneyNumber(response.order.waiting_fee_amount),
+      promoDiscountAmount: toMoneyNumber(
+        response.order.promo_code_discount_amount,
+      ),
+    },
   };
 };
 
@@ -767,11 +892,7 @@ const editOrderService = async (id, userId, data) => {
 
   const savedOrder = await order.save();
 
-  const io = getIO();
-  io.to(`user:${savedOrder.user}`).emit("order-status-update", {
-    orderId: savedOrder._id,
-    status: savedOrder.status,
-  });
+  emitOrderUpdate(savedOrder.user, savedOrder);
 
   return savedOrder;
 };
@@ -886,6 +1007,7 @@ const getTrackingService = async (id, userId) => {
 
   const url =
     borzoOrder.points?.find((p) => p.tracking_url)?.tracking_url || null;
+  const courier = borzoOrder.courier || order.courier || null;
 
   const points =
     borzoOrder.points?.map((p) => ({
@@ -897,6 +1019,22 @@ const getTrackingService = async (id, userId) => {
   return {
     tracking_url: url,
     points,
+    courier: courier
+      ? {
+          name: courier.name || null,
+          surname: courier.surname || null,
+          phone: courier.phone || null,
+          photoUrl: courier.photo_url || courier.photoUrl || null,
+          latitude:
+            courier.latitude || courier.location?.lat
+              ? Number(courier.latitude || courier.location?.lat)
+              : null,
+          longitude:
+            courier.longitude || courier.location?.lng
+              ? Number(courier.longitude || courier.location?.lng)
+              : null,
+        }
+      : null,
   };
 };
 
@@ -1019,6 +1157,7 @@ module.exports = {
   createOrderService,
   getOrdersService,
   getOrderByIdService,
+  getPublicTrackingOrderService,
   cancelOrderService,
   syncOrderService,
   calculateOrderService,

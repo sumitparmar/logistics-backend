@@ -9,8 +9,8 @@ const mapCourierFromBorzo = (borzoCourier) => {
     photoUrl: borzoCourier.photo_url || null,
 
     location: {
-      lat: borzoCourier.latitude || null,
-      lng: borzoCourier.longitude || null,
+      lat: borzoCourier.latitude ? Number(borzoCourier.latitude) : null,
+      lng: borzoCourier.longitude ? Number(borzoCourier.longitude) : null,
     },
   };
 };

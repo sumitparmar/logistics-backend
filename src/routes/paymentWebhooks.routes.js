@@ -3,6 +3,7 @@ const router = express.Router();
 
 const {
   paymentSuccessWebhook,
+  verifyRazorpayWebhook,
 } = require("../controllers/paymentWebhooks.controller");
 
 const { completeRefund } = require("../services/refund.service");
@@ -17,6 +18,10 @@ router.post("/success", paymentSuccessWebhook);
  */
 router.post("/refund-success", async (req, res) => {
   try {
+    if (!verifyRazorpayWebhook(req)) {
+      return res.status(401).json({ received: false });
+    }
+
     const { gatewayOrderId } = req.body;
 
     await completeRefund({

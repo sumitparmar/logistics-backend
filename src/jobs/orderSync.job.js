@@ -3,9 +3,14 @@ const Order = require("../models/Order");
 const pulseService = require("../services/pulse.service");
 const { transitionStatus } = require("../engines/status.engine");
 const { mapBorzoStatus } = require("../utils/statusMapper");
-const { getIO } = require("../config/socket");
+const mapDeliveryStatus = require("../utils/deliveryStatusMapper");
 const { creditWallet } = require("../services/wallet.service");
 const { createInvoiceForOrder } = require("../services/invoice.service");
+const {
+  notifyOrderDelivered,
+} = require("../services/deliveryNotification.service");
+const { mapCourierFromBorzo } = require("../mappers/borzoCourier.mapper");
+const { emitOrderUpdate } = require("../services/realtime.service");
 const startOrderSyncJob = () => {
   cron.schedule("*/2 * * * *", async () => {
     try {
@@ -29,15 +34,32 @@ const startOrderSyncJob = () => {
         const deliveryStatus =
           borzoOrder.points?.find((p) => p.delivery)?.delivery?.status || null;
 
-        const mappedStatus = mapBorzoStatus(
-          deliveryStatus || borzoOrder.status,
-        );
+        const mappedStatus = deliveryStatus
+          ? mapDeliveryStatus(deliveryStatus)
+          : mapBorzoStatus(borzoOrder.status);
 
         const nextStatus = transitionStatus(order.status, mappedStatus);
+        const mappedCourier = mapCourierFromBorzo(borzoOrder.courier);
+        const courierChanged =
+          mappedCourier &&
+          JSON.stringify(order.courier || null) !==
+            JSON.stringify(mappedCourier);
 
-        if (nextStatus !== order.status) {
+        if (nextStatus !== order.status || courierChanged) {
           order.status = nextStatus;
-          order.statusHistory.push({ status: nextStatus });
+          order.rawProviderResponse = response;
+
+          if (mappedCourier) {
+            order.courier = mappedCourier;
+          }
+
+          if (
+            order.statusHistory.length === 0 ||
+            order.statusHistory[order.statusHistory.length - 1].status !==
+              nextStatus
+          ) {
+            order.statusHistory.push({ status: nextStatus });
+          }
 
           if (
             nextStatus === "DELIVERED" &&
@@ -63,16 +85,13 @@ const startOrderSyncJob = () => {
           if (nextStatus === "DELIVERED") {
             try {
               await createInvoiceForOrder(savedOrder);
+              await notifyOrderDelivered(savedOrder);
             } catch (err) {
               console.error("INVOICE CREATE ERROR:", err.message);
             }
           }
 
-          const io = getIO();
-          io.to(`user:${savedOrder.user}`).emit("order-status-update", {
-            orderId: savedOrder._id,
-            status: savedOrder.status,
-          });
+          emitOrderUpdate(savedOrder.user, savedOrder, { admin: true });
         }
       }
     } catch (err) {

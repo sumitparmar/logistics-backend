@@ -84,7 +84,7 @@ const orderSchema = new mongoose.Schema(
     payment: {
       method: {
         type: String,
-        enum: ["CASH", "BANK_CARD", "WALLET"],
+        enum: ["CASH", "BANK_CARD", "CARD", "WALLET", "BALANCE"],
         default: "CASH",
       },
       feePayer: {
@@ -92,6 +92,7 @@ const orderSchema = new mongoose.Schema(
         enum: ["PICKUP", "DROP"],
         default: "DROP",
       },
+      bankCardId: Number,
     },
 
     vehicle: {

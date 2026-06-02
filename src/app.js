@@ -41,10 +41,19 @@ app.use(requestId);
 // Security
 app.use(helmet());
 
-const allowedOrigins = [
+const configuredOrigins = [
   process.env.FRONTEND_URL,
-  "http://localhost:4200",
-  "http://localhost:3000",
+  ...(process.env.CORS_ORIGINS || "")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean),
+];
+
+const developmentOrigins = ["http://localhost:4200", "http://localhost:3000"];
+
+const allowedOrigins = [
+  ...configuredOrigins,
+  ...(process.env.NODE_ENV === "production" ? [] : developmentOrigins),
 ].filter(Boolean);
 
 const corsOptions = {

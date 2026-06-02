@@ -16,6 +16,14 @@ const initSocket = (server) => {
       socket.join(`user:${userId}`);
     });
 
+    socket.on("join-user-room", (userId) => {
+      socket.join(`user:${userId}`);
+    });
+
+    socket.on("join-order-room", (orderId) => {
+      socket.join(`order:${orderId}`);
+    });
+
     socket.on("join-admin", () => {
       socket.join("admin");
     });

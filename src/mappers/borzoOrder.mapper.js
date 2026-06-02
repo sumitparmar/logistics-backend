@@ -1,6 +1,10 @@
 const DEFAULT_BORZO_VEHICLE = 8;
 const VALID_BORZO_VEHICLE_IDS = [1, 2, 3, 5, 8];
 
+function isBorzoNotificationEnabled() {
+  return String(process.env.BORZO_SEND_NOTIFICATIONS || "true") !== "false";
+}
+
 function normalizeBorzoPhone(phone) {
   const digits = String(phone || "").replace(/\D/g, "");
   if (digits.length === 10) return `91${digits}`;
@@ -45,6 +49,23 @@ function applyPaymentMethod(payload, payment = {}) {
   }
 }
 
+function applyCashPaymentPoint(payload, payment = {}) {
+  const method = String(payment.method || "CASH").toUpperCase();
+
+  if (method && method !== "CASH") {
+    return;
+  }
+
+  if (!Array.isArray(payload.points) || payload.points.length < 2) {
+    return;
+  }
+
+  const feePayer = String(payment.feePayer || "DROP").toUpperCase();
+  const pointIndex = feePayer === "PICKUP" ? 0 : payload.points.length - 1;
+
+  payload.points[pointIndex].is_order_payment_here = true;
+}
+
 function getDeliveryStops(data) {
   const stopDrops = Array.isArray(data.stops)
     ? data.stops.filter((stop) => stop.type === "DROP")
@@ -74,8 +95,12 @@ function mapDeliveryStops(data, { includeContacts = false } = {}) {
       address: stop.address,
     };
 
-    if (stop.lat !== undefined && stop.lat !== null) point.latitude = stop.lat;
-    if (stop.lng !== undefined && stop.lng !== null) point.longitude = stop.lng;
+    if (stop.lat !== undefined && stop.lat !== null) {
+      point.latitude = String(stop.lat);
+    }
+    if (stop.lng !== undefined && stop.lng !== null) {
+      point.longitude = String(stop.lng);
+    }
 
     if (includeContacts) {
       point.contact_person = {
@@ -121,17 +146,28 @@ const mapCalculatePayload = (data) => {
   const payload = {
     matter: data.matter,
     vehicle_type_id: resolveVehicleId(data.vehicleTypeId),
+    is_client_notification_enabled: isBorzoNotificationEnabled(),
+    is_contact_person_notification_enabled: isBorzoNotificationEnabled(),
     total_weight_kg: Number(data.package?.weight || 0),
     insurance_amount: data.package?.declaredValue
       ? String(Number(data.package.declaredValue).toFixed(2))
       : "0.00",
     points: [
-      { address: data.pickup.address },
+      {
+        address: data.pickup.address,
+        ...(data.pickup.lat !== undefined && data.pickup.lat !== null
+          ? { latitude: String(data.pickup.lat) }
+          : {}),
+        ...(data.pickup.lng !== undefined && data.pickup.lng !== null
+          ? { longitude: String(data.pickup.lng) }
+          : {}),
+      },
       ...mapDeliveryStops(data, { includeContacts: false }),
     ],
   };
 
   applyPaymentMethod(payload, data.payment);
+  applyCashPaymentPoint(payload, data.payment);
 
   if (isEndOfDay(data)) {
     payload.type = "endofday";
@@ -181,8 +217,8 @@ const mapCreateOrderPayload = (data) => {
 
   const pickupPoint = {
     address: data.pickup.address,
-    latitude: data.pickup.lat,
-    longitude: data.pickup.lng,
+    latitude: String(data.pickup.lat),
+    longitude: String(data.pickup.lng),
     contact_person: {
       name: data.customer.name || null,
       phone: normalizeBorzoPhone(data.customer.phone),
@@ -199,6 +235,8 @@ const mapCreateOrderPayload = (data) => {
   const payload = {
     matter: data.matter,
     vehicle_type_id: resolveVehicleId(data.vehicleTypeId),
+    is_client_notification_enabled: isBorzoNotificationEnabled(),
+    is_contact_person_notification_enabled: isBorzoNotificationEnabled(),
     total_weight_kg: Number(data.package?.weight || 0),
     insurance_amount: data.package?.declaredValue
       ? String(Number(data.package.declaredValue).toFixed(2))
@@ -207,6 +245,7 @@ const mapCreateOrderPayload = (data) => {
   };
 
   applyPaymentMethod(payload, data.payment);
+  applyCashPaymentPoint(payload, data.payment);
 
   if (isEndOfDay(data)) {
     payload.type = "endofday";

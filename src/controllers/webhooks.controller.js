@@ -2,12 +2,12 @@ const Order = require("../models/Order");
 const { mapBorzoStatus } = require("../utils/statusMapper");
 const mapDeliveryStatus = require("../utils/deliveryStatusMapper");
 const { transitionStatus } = require("../engines/status.engine");
-const { getIO } = require("../config/socket");
 const { mapCourierFromBorzo } = require("../mappers/borzoCourier.mapper");
 const verifyBorzoSignature = require("../utils/verifyBorzoSignature");
 const WebhookEvent = require("../models/WebhookEvent");
 const webhookFingerprint = require("../utils/webhookFingerprint");
 const { creditWallet } = require("../services/wallet.service");
+const { emitOrderUpdate } = require("../services/realtime.service");
 const borzoWebhook = async (req, res) => {
   try {
     // Verify signature
@@ -38,8 +38,10 @@ const borzoWebhook = async (req, res) => {
     //  Extract order info
     const borzoOrderId = payload?.order?.order_id;
 
-    const borzoStatus =
-      payload?.order?.status || payload?.order?.points?.[0]?.delivery?.status;
+    const deliveryStatus =
+      payload?.order?.points?.find((point) => point?.delivery?.status)
+        ?.delivery?.status || null;
+    const borzoStatus = deliveryStatus || payload?.order?.status;
 
     if (!borzoOrderId || !borzoStatus) {
       return res.status(200).json({ received: true });
@@ -55,7 +57,9 @@ const borzoWebhook = async (req, res) => {
     }
 
     //  Map + transition status
-    const mappedStatus = mapBorzoStatus(borzoStatus);
+    const mappedStatus = deliveryStatus
+      ? mapDeliveryStatus(deliveryStatus)
+      : mapBorzoStatus(borzoStatus);
     if (!mappedStatus) {
       return res.status(200).json({ received: true });
     }
@@ -80,18 +84,7 @@ const borzoWebhook = async (req, res) => {
 
     const savedOrder = await order.save();
 
-    //  Realtime socket update
-    const io = getIO();
-    io.to(`user:${savedOrder.user}`).emit("order-status-update", {
-      orderId: savedOrder._id,
-      status: savedOrder.status,
-    });
-
-    io.to("admin").emit("admin-order-update", {
-      orderId: savedOrder._id,
-      status: savedOrder.status,
-      data: savedOrder,
-    });
+    emitOrderUpdate(savedOrder.user, savedOrder, { admin: true });
 
     return res.status(200).json({ received: true });
   } catch (error) {
@@ -189,18 +182,7 @@ const borzoDeliveryWebhook = async (req, res) => {
 
     const savedOrder = await order.save();
 
-    //  Realtime socket update
-    const io = getIO();
-    io.to(`user:${savedOrder.user}`).emit("order-status-update", {
-      orderId: savedOrder._id,
-      status: savedOrder.status,
-    });
-
-    io.to("admin").emit("admin-order-update", {
-      orderId: savedOrder._id,
-      status: savedOrder.status,
-      data: savedOrder,
-    });
+    emitOrderUpdate(savedOrder.user, savedOrder, { admin: true });
 
     return res.status(200).json({ received: true });
   } catch (error) {
