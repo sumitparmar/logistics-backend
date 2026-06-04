@@ -27,25 +27,60 @@ function resolveVehicleId(vehicleTypeId) {
   return VALID_BORZO_VEHICLE_IDS.includes(id) ? id : DEFAULT_BORZO_VEHICLE;
 }
 
+// function applyPaymentMethod(payload, payment = {}) {
+//   const method = String(payment.method || "").toUpperCase();
+
+//   if (!method || method === "CASH") {
+//     return;
+//   }
+
+//   if (method === "BANK_CARD" || method === "CARD") {
+//     if (!payment.bankCardId && !payment.bank_card_id) {
+//       throw new Error("bankCardId is required for bank card payment");
+//     }
+
+//     payload.payment_method = "bank_card";
+//     payload.bank_card_id = Number(payment.bankCardId || payment.bank_card_id);
+//     return;
+//   }
+
+//   if (method === "WALLET" || method === "BALANCE") {
+//     payload.payment_method = "balance";
+//   }
+// }
+
 function applyPaymentMethod(payload, payment = {}) {
   const method = String(payment.method || "").toUpperCase();
 
+  // CASH PAYMENT
   if (!method || method === "CASH") {
+    // Use provider default payment method
+    // Do not explicitly send payment_method for cash
+    delete payload.payment_method;
+    delete payload.bank_card_id;
+
     return;
   }
 
+  // CARD PAYMENT
   if (method === "BANK_CARD" || method === "CARD") {
-    if (!payment.bankCardId && !payment.bank_card_id) {
+    const bankCardId = payment.bankCardId || payment.bank_card_id;
+
+    if (!bankCardId) {
       throw new Error("bankCardId is required for bank card payment");
     }
 
     payload.payment_method = "bank_card";
-    payload.bank_card_id = Number(payment.bankCardId || payment.bank_card_id);
+    payload.bank_card_id = Number(bankCardId);
+
     return;
   }
 
+  // WALLET / BALANCE
   if (method === "WALLET" || method === "BALANCE") {
     payload.payment_method = "balance";
+
+    delete payload.bank_card_id;
   }
 }
 
@@ -98,9 +133,14 @@ function mapDeliveryStops(data, { includeContacts = false } = {}) {
     if (stop.lat !== undefined && stop.lat !== null) {
       point.latitude = String(stop.lat);
     }
+
     if (stop.lng !== undefined && stop.lng !== null) {
       point.longitude = String(stop.lng);
     }
+
+    // Borzo EOD restriction cleanup
+    delete point.required_start_datetime;
+    delete point.required_finish_datetime;
 
     if (includeContacts) {
       point.contact_person = {
@@ -145,38 +185,72 @@ const mapCalculatePayload = (data) => {
 
   const payload = {
     matter: data.matter,
+
     vehicle_type_id: resolveVehicleId(data.vehicleTypeId),
+
     is_client_notification_enabled: isBorzoNotificationEnabled(),
+
     is_contact_person_notification_enabled: isBorzoNotificationEnabled(),
+
     total_weight_kg: Number(data.package?.weight || 0),
+
     insurance_amount: data.package?.declaredValue
       ? String(Number(data.package.declaredValue).toFixed(2))
       : "0.00",
+
     points: [
       {
         address: data.pickup.address,
+
         ...(data.pickup.lat !== undefined && data.pickup.lat !== null
-          ? { latitude: String(data.pickup.lat) }
+          ? {
+              latitude: String(data.pickup.lat),
+            }
           : {}),
+
         ...(data.pickup.lng !== undefined && data.pickup.lng !== null
-          ? { longitude: String(data.pickup.lng) }
+          ? {
+              longitude: String(data.pickup.lng),
+            }
           : {}),
       },
-      ...mapDeliveryStops(data, { includeContacts: false }),
+
+      ...mapDeliveryStops(data, {
+        includeContacts: false,
+      }),
     ],
   };
 
   applyPaymentMethod(payload, data.payment);
+
   applyCashPaymentPoint(payload, data.payment);
 
-  if (isEndOfDay(data)) {
-    payload.type = "endofday";
-    payload.total_weight_kg = Number(data.package?.weight || 1);
-    delete payload.vehicle_type_id;
-  }
-
+  // SCHEDULED DELIVERY
   if (data.deliveryType === "SCHEDULED") {
     applySchedule(payload, data.scheduledAt);
+  }
+
+  // END OF DAY DELIVERY
+  if (isEndOfDay(data)) {
+    payload.type = "endofday";
+
+    payload.total_weight_kg = Number(data.package?.weight || 1);
+
+    // Borzo restriction:
+    // vehicle_type_id prohibited
+    delete payload.vehicle_type_id;
+
+    // Borzo restriction:
+    // schedule fields prohibited
+    payload.points = payload.points.map((point) => {
+      const cleanPoint = { ...point };
+
+      delete cleanPoint.required_start_datetime;
+
+      delete cleanPoint.required_finish_datetime;
+
+      return cleanPoint;
+    });
   }
 
   return payload;
@@ -197,7 +271,9 @@ const mapCreateOrderPayload = (data) => {
 
   assertEndOfDayPointCount(data);
 
-  const deliveryPoints = mapDeliveryStops(data, { includeContacts: true });
+  const deliveryPoints = mapDeliveryStops(data, {
+    includeContacts: true,
+  });
 
   if (!data.pickup?.lat || !data.pickup?.lng) {
     throw new Error("Valid pickup coordinates are required");
@@ -217,44 +293,77 @@ const mapCreateOrderPayload = (data) => {
 
   const pickupPoint = {
     address: data.pickup.address,
+
     latitude: String(data.pickup.lat),
+
     longitude: String(data.pickup.lng),
+
     contact_person: {
       name: data.customer.name || null,
+
       phone: normalizeBorzoPhone(data.customer.phone),
     },
+
     note: data.pickup?.notes || data.pickupNotes || null,
   };
 
+  // COD
   if (data.cod?.amount) {
     const codPoint = deliveryPoints[deliveryPoints.length - 1];
+
     codPoint.is_cod_cash_voucher_required = true;
+
     codPoint.taking_amount = Number(data.cod.amount).toFixed(2);
   }
 
   const payload = {
     matter: data.matter,
+
     vehicle_type_id: resolveVehicleId(data.vehicleTypeId),
+
     is_client_notification_enabled: isBorzoNotificationEnabled(),
+
     is_contact_person_notification_enabled: isBorzoNotificationEnabled(),
+
     total_weight_kg: Number(data.package?.weight || 0),
+
     insurance_amount: data.package?.declaredValue
       ? String(Number(data.package.declaredValue).toFixed(2))
       : "0.00",
+
     points: [pickupPoint, ...deliveryPoints],
   };
 
   applyPaymentMethod(payload, data.payment);
+
   applyCashPaymentPoint(payload, data.payment);
 
-  if (isEndOfDay(data)) {
-    payload.type = "endofday";
-    payload.total_weight_kg = Number(data.package?.weight || 1);
-    delete payload.vehicle_type_id;
-  }
-
+  // SCHEDULED DELIVERY
   if (data.deliveryType === "SCHEDULED") {
     applySchedule(payload, data.scheduledAt);
+  }
+
+  // END OF DAY DELIVERY
+  if (isEndOfDay(data)) {
+    payload.type = "endofday";
+
+    payload.total_weight_kg = Number(data.package?.weight || 1);
+
+    // Borzo restriction:
+    // vehicle_type_id prohibited
+    delete payload.vehicle_type_id;
+
+    // Borzo restriction:
+    // schedule fields prohibited
+    payload.points = payload.points.map((point) => {
+      const cleanPoint = { ...point };
+
+      delete cleanPoint.required_start_datetime;
+
+      delete cleanPoint.required_finish_datetime;
+
+      return cleanPoint;
+    });
   }
 
   return payload;
@@ -284,7 +393,8 @@ const mapEditPayload = (borzoOrderId, data, existingOrder) => {
 
     payload.points = data.points
       .map((p, index) => {
-        const existingPoint = existingOrder.rawProviderResponse.order.points[index];
+        const existingPoint =
+          existingOrder.rawProviderResponse.order.points[index];
 
         if (!existingPoint) return null;
 

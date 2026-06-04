@@ -189,8 +189,30 @@ const createOrderService = async (data) => {
 
     finalPrice: finalAmount,
   };
-  let createPayload = mapCreateOrderPayload(data);
+  const sanitizedCreateData = JSON.parse(JSON.stringify(data));
 
+  // Defensive cleanup for EOD Borzo orders
+  if (
+    sanitizedCreateData.deliveryType === "EOD" ||
+    sanitizedCreateData.deliveryType === "END_OF_DAY"
+  ) {
+    delete sanitizedCreateData.scheduledAt;
+    delete sanitizedCreateData.schedule;
+    delete sanitizedCreateData.scheduleDateTime;
+
+    if (Array.isArray(sanitizedCreateData.stops)) {
+      sanitizedCreateData.stops = sanitizedCreateData.stops.map((stop) => {
+        const cleanStop = { ...stop };
+
+        delete cleanStop.required_start_datetime;
+        delete cleanStop.required_finish_datetime;
+
+        return cleanStop;
+      });
+    }
+  }
+
+  let createPayload = mapCreateOrderPayload(sanitizedCreateData);
   let createResponse;
 
   try {
@@ -649,7 +671,9 @@ const calculateOrderService = async (data) => {
   const vehicles = await getVehicleTypes();
   const validVehicle = isEndOfDay
     ? null
-    : vehicles.find((vehicle) => String(vehicle.id) === String(data.vehicleTypeId));
+    : vehicles.find(
+        (vehicle) => String(vehicle.id) === String(data.vehicleTypeId),
+      );
 
   if (!isEndOfDay && !validVehicle) {
     const err = new Error("Invalid vehicle type");
