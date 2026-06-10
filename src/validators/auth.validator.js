@@ -26,6 +26,7 @@ const loginSchema = Joi.object({
 
 const sendOtpSchema = Joi.object({
   phone: phoneRule.required(),
+  email: Joi.string().email().optional().allow("", null),
 });
 
 const verifyOtpSchema = Joi.object({

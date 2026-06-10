@@ -21,6 +21,10 @@ const {
   notifyOrderDelivered,
 } = require("./deliveryNotification.service");
 const { emitOrderUpdate } = require("./realtime.service");
+
+const {
+  createCustomerNotification,
+} = require("./customerNotification.service");
 const mongoose = require("mongoose");
 
 const toMoneyNumber = (value) => Number(Number(value || 0).toFixed(2));
@@ -617,6 +621,8 @@ const syncOrderService = async (id, userId) => {
   const deliveryStatus =
     borzoOrder.points?.find((p) => p.delivery)?.delivery?.status || null;
 
+  const previousStatus = order.status;
+
   const mappedStatus = mapBorzoStatus(deliveryStatus || borzoStatus);
   const wasDelivered = order.status === "DELIVERED";
 
@@ -646,6 +652,23 @@ const syncOrderService = async (id, userId) => {
   order.rawProviderResponse = response;
 
   const savedOrder = await order.save();
+
+  if (previousStatus !== mappedStatus) {
+    try {
+      await createCustomerNotification({
+        user: order.user,
+        order: order._id,
+        type: "ORDER_STATUS",
+        title: "Order Update",
+        message: `Your order #${order.borzoOrderId} is now ${mappedStatus.replace(
+          /_/g,
+          " ",
+        )}`,
+      });
+    } catch (err) {
+      console.error("Notification creation failed:", err.message);
+    }
+  }
 
   if (mappedStatus === "DELIVERED" && !wasDelivered) {
     notifyOrderDelivered(savedOrder).catch(() => {});
@@ -884,7 +907,6 @@ const editOrderService = async (id, userId, data) => {
         calculatedAt: new Date(),
       };
 
-      // ✅ ALSO UPDATE SNAPSHOT (CRITICAL FIX)
       order.pricingSnapshot = {
         basePrice: baseAmount,
 

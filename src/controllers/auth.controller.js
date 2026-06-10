@@ -53,7 +53,7 @@ const sendOtpController = async (req, res, next) => {
       return sendError(res, "Phone number required", 400);
     }
 
-    const result = await sendOtp(phone);
+    const result = await sendOtp(phone, req.body.email);
 
     return sendSuccess(res, result, "OTP sent");
   } catch (error) {

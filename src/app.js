@@ -32,6 +32,8 @@ const app = express(); // FIRST create app
 const analyticsRoutes = require("./routes/analytics.routes");
 const invoiceRoutes = require("./routes/invoice.routes");
 const addressRoutes = require("./routes/address.routes");
+
+const customerNotificationsRoutes = require("./routes/customerNotifications.routes");
 // MUST BE FIRST
 app.set("trust proxy", 1);
 
@@ -87,6 +89,7 @@ app.use(
 // Routes
 app.use("/api/orders", ordersRoutes);
 app.use("/api/support", require("./routes/support.routes"));
+app.use("/api/customer-notifications", customerNotificationsRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/analytics", protect, analyticsRoutes);
 app.use("/api/webhooks", webhooksRoutes);

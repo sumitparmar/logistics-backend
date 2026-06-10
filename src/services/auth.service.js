@@ -2,7 +2,6 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
 // const Otp = require("../models/Otp");
-const { sendSms } = require("./sms.service");
 const sendEmail = require("../utils/sendEmail");
 const crypto = require("crypto");
 const redis = require("../config/redis");
@@ -163,18 +162,29 @@ const generateToken = (user) => {
   };
 };
 
-const sendOtp = async (phone) => {
+const sendOtp = async (phone, fallbackEmail) => {
   if (!phone) {
     throw new Error("Phone number is required");
   }
 
   const otpKey = `otp:${phone}`;
+  const otpEmailKey = `otp_email:${phone}`;
   const throttleKey = `otp_throttle:${phone}`;
+  const normalizedEmail = fallbackEmail
+    ? String(fallbackEmail).trim().toLowerCase()
+    : null;
 
   // Prevent multiple OTP requests within 30 seconds
   const isThrottled = await redis.get(throttleKey);
   if (isThrottled) {
     throw new Error("Please wait before requesting another OTP");
+  }
+
+  const user = await User.findOne({ phone });
+  const email = user?.email || normalizedEmail || null;
+
+  if (String(process.env.SMS_ENABLED || "false") !== "true" && !email) {
+    throw new Error("Email is required to receive OTP when SMS is unavailable");
   }
 
   const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
@@ -185,13 +195,15 @@ const sendOtp = async (phone) => {
   // Set throttle key for 30 seconds
   await redis.set(throttleKey, "1", "EX", 30);
 
-  const user = await User.findOne({ phone });
+  if (email) {
+    await redis.set(otpEmailKey, email, "EX", 300);
+  }
 
   await otpQueue.add(
     {
       phone,
       otp: generatedOtp,
-      email: user?.email || null,
+      email,
     },
     {
       attempts: 3,
@@ -226,6 +238,7 @@ const verifyOtp = async (phone, otp) => {
   }
 
   const otpKey = `otp:${phone}`;
+  const otpEmailKey = `otp_email:${phone}`;
   const attemptKey = `otp_attempts:${phone}`;
 
   const storedOtp = await redis.get(otpKey);
@@ -243,6 +256,7 @@ const verifyOtp = async (phone, otp) => {
 
     if (attempts >= 5) {
       await redis.del(otpKey);
+      await redis.del(otpEmailKey);
       throw new Error("Too many invalid attempts. OTP expired.");
     }
 
@@ -251,6 +265,8 @@ const verifyOtp = async (phone, otp) => {
 
   await redis.del(otpKey);
   await redis.del(attemptKey);
+  const fallbackEmail = await redis.get(otpEmailKey);
+  await redis.del(otpEmailKey);
 
   let user = await User.findOne({ phone });
 
@@ -260,11 +276,21 @@ const verifyOtp = async (phone, otp) => {
   }
 
   if (!user) {
+    const availableEmail =
+      fallbackEmail && !(await User.exists({ email: fallbackEmail }))
+        ? fallbackEmail
+        : undefined;
+
     user = await User.create({
       phone,
+      ...(availableEmail && { email: availableEmail }),
       authProvider: "otp",
       role: "user",
+      isPhoneVerified: true,
     });
+  } else if (!user.isPhoneVerified) {
+    user.isPhoneVerified = true;
+    await user.save();
   }
 
   //  FIX: return same structure as login
