@@ -14,15 +14,11 @@ const createInvoiceForOrder = async (order) => {
 
   if (order.cod?.enabled && order.cod.amount > 0) {
     lineItems.push({
-      label: "COD Amount",
+      label: "COD Collected",
       amount: order.cod.amount,
     });
   }
-
-  const subtotal = lineItems.reduce(
-    (sum, item) => sum + Number(item.amount),
-    0,
-  );
+  const subtotal = Number(order.pricing.amount);
 
   const invoice = await Invoice.create({
     invoiceNumber: generateInvoiceNumber(),

@@ -275,7 +275,12 @@ const mapCreateOrderPayload = (data) => {
     includeContacts: true,
   });
 
-  if (!data.pickup?.lat || !data.pickup?.lng) {
+  if (
+    data.pickup?.lat === undefined ||
+    data.pickup?.lat === null ||
+    data.pickup?.lng === undefined ||
+    data.pickup?.lng === null
+  ) {
     throw new Error("Valid pickup coordinates are required");
   }
 
@@ -386,16 +391,18 @@ const mapEditPayload = (borzoOrderId, data, existingOrder) => {
     payload.vehicle_type_id = Number(data.vehicle_type_id);
   }
 
-  if (data.points && existingOrder?.rawProviderResponse?.order?.points) {
+  const providerOrder =
+    existingOrder?.rawProviderResponse?.order ||
+    existingOrder?.rawProviderResponse?.orders?.[0];
+
+  if (data.points && providerOrder?.points) {
     const isExistingEndOfDay =
       existingOrder?.deliveryType === "END_OF_DAY" ||
       existingOrder?.deliveryType === "EOD";
 
     payload.points = data.points
       .map((p, index) => {
-        const existingPoint =
-          existingOrder.rawProviderResponse.order.points[index];
-
+        const existingPoint = providerOrder.points[index];
         if (!existingPoint) return null;
 
         const point = {

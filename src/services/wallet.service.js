@@ -10,8 +10,18 @@ const getWallet = async (userId) => {
   if (!wallet) {
     wallet = await Wallet.create({
       user: userId,
+
       balance: 0,
       currency: "INR",
+
+      totalCredits: 0,
+      totalDebits: 0,
+      transactionCount: 0,
+
+      pendingSettlement: 0,
+      withdrawableBalance: 0,
+
+      status: "ACTIVE",
     });
   }
 
@@ -30,19 +40,35 @@ const creditWallet = async ({
 }) => {
   const wallet = await getWallet(userId);
 
-  const newBalance = wallet.balance + Number(amount);
+  const creditAmount = Number(amount);
 
   await Wallet.updateOne(
     { _id: wallet._id },
-    { $set: { balance: newBalance } },
+    {
+      $inc: {
+        balance: creditAmount,
+        withdrawableBalance: creditAmount,
+        totalCredits: creditAmount,
+        transactionCount: 1,
+      },
+
+      $set: {
+        lastTransactionAt: new Date(),
+      },
+    },
   );
 
   await LedgerEntry.create({
     wallet: wallet._id,
+
     type: "CREDIT",
-    amount: Number(amount),
+
+    amount: creditAmount,
+
     reason,
+
     reference,
+
     metadata,
   });
 
@@ -55,23 +81,43 @@ const creditWallet = async ({
 const debitWallet = async ({ userId, amount, reason, reference, metadata }) => {
   const wallet = await getWallet(userId);
 
-  if (wallet.balance < Number(amount)) {
+  const debitAmount = Number(amount);
+
+  const result = await Wallet.updateOne(
+    {
+      _id: wallet._id,
+      balance: { $gte: debitAmount },
+    },
+
+    {
+      $inc: {
+        balance: -debitAmount,
+        withdrawableBalance: -debitAmount,
+        totalDebits: debitAmount,
+        transactionCount: 1,
+      },
+
+      $set: {
+        lastTransactionAt: new Date(),
+      },
+    },
+  );
+
+  if (result.modifiedCount === 0) {
     throw new Error("Insufficient wallet balance");
   }
 
-  const newBalance = wallet.balance - Number(amount);
-
-  await Wallet.updateOne(
-    { _id: wallet._id },
-    { $set: { balance: newBalance } },
-  );
-
   await LedgerEntry.create({
     wallet: wallet._id,
+
     type: "DEBIT",
-    amount: Number(amount),
+
+    amount: debitAmount,
+
     reason,
+
     reference,
+
     metadata,
   });
 

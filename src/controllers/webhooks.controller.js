@@ -8,6 +8,11 @@ const WebhookEvent = require("../models/WebhookEvent");
 const webhookFingerprint = require("../utils/webhookFingerprint");
 const { creditWallet } = require("../services/wallet.service");
 const { emitOrderUpdate } = require("../services/realtime.service");
+const { createInvoiceForOrder } = require("../services/invoice.service");
+const generateInvoicePdf = require("../utils/generateInvoicePdf");
+const sendEmail = require("../utils/sendEmail");
+const User = require("../models/User");
+
 const borzoWebhook = async (req, res) => {
   try {
     // Verify signature
@@ -39,8 +44,8 @@ const borzoWebhook = async (req, res) => {
     const borzoOrderId = payload?.order?.order_id;
 
     const deliveryStatus =
-      payload?.order?.points?.find((point) => point?.delivery?.status)
-        ?.delivery?.status || null;
+      payload?.order?.points?.find((point) => point?.delivery?.status)?.delivery
+        ?.status || null;
     const borzoStatus = deliveryStatus || payload?.order?.status;
 
     if (!borzoOrderId || !borzoStatus) {
@@ -138,11 +143,16 @@ const borzoDeliveryWebhook = async (req, res) => {
     }
 
     //  Map delivery status → internal status
+
     const mappedStatus = mapDeliveryStatus(delivery.status);
     if (!mappedStatus) {
       return res.status(200).json({ received: true });
     }
     order.status = transitionStatus(order.status, mappedStatus);
+
+    if (mappedStatus === "DELIVERED" && !order.deliveredAt) {
+      order.deliveredAt = new Date();
+    }
 
     // COD Settlement on Delivered
     if (
@@ -181,6 +191,45 @@ const borzoDeliveryWebhook = async (req, res) => {
     };
 
     const savedOrder = await order.save();
+
+    if (mappedStatus === "DELIVERED") {
+      console.log("INVOICE FLOW STARTED");
+
+      const invoice = await createInvoiceForOrder(savedOrder);
+
+      const user = await User.findById(savedOrder.user);
+
+      if (user?.email) {
+        const pdfBuffer = await generateInvoicePdf(invoice, savedOrder, user);
+
+        try {
+          await sendEmail(
+            user.email,
+            `Invoice ${invoice.invoiceNumber}`,
+            `
+          <h2>Delivery Completed</h2>
+          <p>Your order has been delivered successfully.</p>
+          <p>Your invoice is attached with this email.</p>
+          <p>Invoice Number: ${invoice.invoiceNumber}</p>
+          <p>Thank you for choosing MoveKart Logistics.</p>
+        `,
+            [
+              {
+                filename: `${invoice.invoiceNumber}.pdf`,
+                content: pdfBuffer,
+                contentType: "application/pdf",
+              },
+            ],
+          );
+
+          console.log(`INVOICE EMAIL SENT TO: ${user.email}`);
+        } catch (emailError) {
+          console.error("INVOICE EMAIL FAILED:", emailError.message);
+        }
+      } else {
+        console.warn(`NO EMAIL FOUND FOR USER: ${savedOrder.user}`);
+      }
+    }
 
     emitOrderUpdate(savedOrder.user, savedOrder, { admin: true });
 

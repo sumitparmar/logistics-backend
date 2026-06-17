@@ -33,6 +33,13 @@ const protect = async (req, res, next) => {
       });
     }
 
+    if (user.isActive === false) {
+      return res.status(403).json({
+        success: false,
+        message: "Account disabled",
+      });
+    }
+
     req.user = {
       _id: user._id,
       role: user.role,

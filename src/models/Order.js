@@ -2,9 +2,6 @@ const mongoose = require("mongoose");
 
 const orderSchema = new mongoose.Schema(
   {
-    // -------------------
-    // CORE REFERENCES
-    // -------------------
     user: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
@@ -210,6 +207,7 @@ const orderSchema = new mongoose.Schema(
       vehicleType: String,
       vehicleMultiplier: Number,
       insurancePercent: Number,
+      insuranceFeeAmount: Number,
       codFee: Number,
       finalPrice: Number,
     },

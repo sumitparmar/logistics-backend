@@ -7,6 +7,7 @@ const {
   payIn,
   payOut,
   getWalletBalance,
+  getWalletSummary,
   getLedger,
   createPaymentIntentAndGatewayOrder,
   refundPayment,
@@ -17,6 +18,9 @@ router.get("/", protect, getPaymentMethods);
 
 // WALLET
 router.get("/wallet", protect, getWalletBalance);
+
+router.get("/summary", protect, getWalletSummary);
+
 router.get("/ledger", protect, getLedger);
 
 // TRANSACTIONS

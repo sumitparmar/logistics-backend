@@ -11,7 +11,10 @@ function applyAdminPricing({ basePrice, config, vehicleType }) {
   price += config.baseFees?.handlingFee || 0;
 
   // Vehicle override
-  const vehicle = config.vehicleOverrides?.find((v) => v.type === vehicleType);
+  const vehicle = config.vehicleOverrides?.find(
+    (v) => String(v.type) === String(vehicleType),
+  );
+
   if (vehicle) {
     price *= vehicle.multiplier;
   }

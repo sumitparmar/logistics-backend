@@ -6,7 +6,7 @@ const {
   throwProviderError,
 } = require("../utils/providerErrorMapper");
 const { mapBorzoStatus } = require("../utils/statusMapper");
-
+const mapDeliveryStatus = require("../utils/deliveryStatusMapper");
 const AdminPricing = require("../models/adminPricing.model");
 const { applyAdminPricing } = require("./adminPricing.service");
 
@@ -182,13 +182,17 @@ const createOrderService = async (data) => {
     surgeMultiplier: pricingConfig.surge?.multiplier || 1,
     surgeApplied: pricingConfig.surge?.enabled || false,
 
-    vehicleType: String(data.vehicleTypeId),
+    vehicleType: String(
+      priceResponse?.order?.vehicle_type_id || data.vehicleTypeId,
+    ),
+
     vehicleMultiplier:
       pricingConfig.vehicleOverrides?.find(
-        (v) => v.type === String(data.vehicleTypeId),
+        (v) => String(v.type) === String(data.vehicleTypeId),
       )?.multiplier || 1,
 
     insurancePercent: pricingConfig.extras?.insurancePercent || 0,
+    insuranceFeeAmount: insuranceCharge,
     codFee: pricingConfig.extras?.codFee || 0,
 
     finalPrice: finalAmount,
@@ -373,8 +377,7 @@ const getOrdersService = async (userId, query = {}) => {
       .skip(skip)
       .limit(limit),
 
-    Order.countDocuments(baseFilter),
-
+    Order.countDocuments(filter),
     Order.countDocuments({
       ...baseFilter,
       status: { $in: ["CREATED", "ASSIGNED", "PICKED_UP", "IN_TRANSIT"] },
@@ -445,6 +448,7 @@ const getPublicTrackingOrderService = async (id) => {
 
   const providerOrder =
     order.rawProviderResponse?.order || order.rawProviderResponse?.orders?.[0];
+
   const sanitizedProviderOrder = providerOrder
     ? {
         order_id: providerOrder.order_id,
@@ -623,7 +627,9 @@ const syncOrderService = async (id, userId) => {
 
   const previousStatus = order.status;
 
-  const mappedStatus = mapBorzoStatus(deliveryStatus || borzoStatus);
+  const mappedStatus = deliveryStatus
+    ? mapDeliveryStatus(deliveryStatus)
+    : mapBorzoStatus(borzoStatus);
   const wasDelivered = order.status === "DELIVERED";
 
   order.status = transitionStatus(order.status, mappedStatus);
@@ -800,8 +806,8 @@ const editOrderService = async (id, userId, data) => {
     throw err;
   }
 
-  const providerOrder = response?.order || response?.data?.order;
-
+  const providerOrder =
+    response?.order || response?.data?.order || response?.orders?.[0];
   if (providerOrder) {
     order.package.description = providerOrder.matter;
     order.package.weight = providerOrder.total_weight_kg;
@@ -901,7 +907,7 @@ const editOrderService = async (id, userId, data) => {
       order.pricing = {
         baseAmount,
         adjustedAmount,
-        insurance: order.pricing?.insurance || 0,
+        insurance: Number(priceResponse.order.insurance_fee_amount || 0),
         amount: finalAmount,
         currency: process.env.CURRENCY,
         calculatedAt: new Date(),
@@ -919,12 +925,16 @@ const editOrderService = async (id, userId, data) => {
         surgeApplied: pricingConfig.surge?.enabled || false,
 
         vehicleType: String(order.vehicleTypeId),
+
         vehicleMultiplier:
           pricingConfig.vehicleOverrides?.find(
-            (v) => v.type === String(order.vehicleTypeId),
+            (v) => String(v.type) === String(order.vehicleTypeId),
           )?.multiplier || 1,
 
         insurancePercent: pricingConfig.extras?.insurancePercent || 0,
+        insuranceFeeAmount: Number(
+          priceResponse.order.insurance_fee_amount || 0,
+        ),
         codFee: pricingConfig.extras?.codFee || 0,
 
         finalPrice: finalAmount,

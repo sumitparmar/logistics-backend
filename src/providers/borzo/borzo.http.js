@@ -26,7 +26,7 @@ axiosRetry(axiosClient, {
 
     const status = error.response?.status;
 
-    return status >= 500;
+    return status === 429 || status >= 500;
   },
 });
 

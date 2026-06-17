@@ -5,6 +5,11 @@ const User = require("../models/User");
 const Order = require("../models/Order");
 const AdminRole = require("../models/AdminRole");
 const adminPermissions = require("../constants/adminPermissions");
+const { createInvoiceForOrder } = require("../services/invoice.service");
+const generateInvoicePdf = require("../utils/generateInvoicePdf");
+const sendEmail = require("../utils/sendEmail");
+const { creditWallet } = require("../services/wallet.service");
+
 const ALL_PERMISSIONS = Object.values(adminPermissions).flatMap((module) =>
   Object.values(module),
 );
@@ -59,6 +64,11 @@ const getOrdersSummary = async (req, res) => {
 const getRevenueSummary = async (req, res) => {
   const result = await Order.aggregate([
     {
+      $match: {
+        status: "DELIVERED",
+      },
+    },
+    {
       $group: {
         _id: null,
         totalRevenue: { $sum: "$pricing.amount" },
@@ -75,6 +85,7 @@ const getRevenueSummary = async (req, res) => {
 };
 
 // COD OUTSTANDING
+
 const getCodOutstanding = async (req, res) => {
   const result = await Order.aggregate([
     {
@@ -464,9 +475,9 @@ const getCouriers = async (req, res) => {
     const couriersMap = new Map();
 
     orders.forEach((order) => {
-      if (order.courier?.courier_id) {
-        couriersMap.set(order.courier.courier_id, {
-          id: order.courier.courier_id,
+      if (order.courier?.courierId) {
+        couriersMap.set(order.courier.courierId, {
+          id: order.courier.courierId,
           name: order.courier.name || "N/A",
           phone: order.courier.phone || "N/A",
           status: order.status,
@@ -575,7 +586,7 @@ const getDashboard = async (req, res) => {
       {
         $match: {
           status: "DELIVERED",
-          createdAt: { $gte: startDate },
+          deliveredAt: { $gte: startDate },
         },
       },
       {
@@ -592,7 +603,7 @@ const getDashboard = async (req, res) => {
       {
         $match: {
           status: "DELIVERED",
-          createdAt: { $gte: prevStartDate, $lt: startDate },
+          deliveredAt: { $gte: prevStartDate, $lt: startDate },
         },
       },
       {
@@ -608,19 +619,20 @@ const getDashboard = async (req, res) => {
     const revenueChange = calculateGrowth(revenueFiltered, prevRevenue);
 
     // ---- SALES GRAPH ----
+
     const sales = await Order.aggregate([
       {
         $match: {
           status: "DELIVERED",
-          createdAt: { $gte: startDate },
+          deliveredAt: { $gte: startDate },
         },
       },
       {
         $group: {
           _id:
             range === "today"
-              ? { $hour: "$createdAt" }
-              : { $dayOfMonth: "$createdAt" },
+              ? { $hour: "$deliveredAt" }
+              : { $dayOfMonth: "$deliveredAt" },
 
           total: { $sum: "$pricing.amount" },
         },
@@ -748,6 +760,10 @@ const updateOrderStatus = async (req, res) => {
     const { status } = req.body;
     const orderId = req.params.id;
 
+    console.log("ADMIN STATUS UPDATE HIT");
+    console.log("ORDER:", orderId);
+    console.log("NEW STATUS:", status);
+
     const order = await Order.findById(orderId);
 
     if (!order) {
@@ -776,6 +792,77 @@ const updateOrderStatus = async (req, res) => {
         meta: { orderId: savedOrder._id },
         priority: "LOW",
       });
+    }
+
+    if (isNewlyDelivered) {
+      try {
+        console.log("=================================");
+        console.log("INVOICE FLOW STARTED");
+        console.log("ORDER ID:", savedOrder._id);
+        console.log("USER ID:", savedOrder.user);
+
+        if (
+          savedOrder.cod?.enabled === true &&
+          savedOrder.codSettled !== true
+        ) {
+          await creditWallet({
+            userId: savedOrder.user,
+            amount: savedOrder.cod.amount,
+            reason: "COD_ORDER_DELIVERED",
+            reference: savedOrder._id.toString(),
+            metadata: {
+              borzoOrderId: savedOrder.borzoOrderId,
+            },
+          });
+
+          savedOrder.codSettled = true;
+          await savedOrder.save();
+        }
+
+        const invoice = await createInvoiceForOrder(savedOrder);
+
+        console.log("INVOICE CREATED:", invoice.invoiceNumber);
+
+        const user = await User.findById(savedOrder.user);
+
+        console.log("USER FOUND:", user?.email);
+
+        if (!user?.email) {
+          console.log("NO EMAIL FOUND FOR USER");
+        } else {
+          console.log("GENERATING PDF...");
+
+          const pdfBuffer = await generateInvoicePdf(invoice, savedOrder, user);
+
+          console.log("PDF GENERATED");
+
+          console.log("SENDING EMAIL...");
+
+          await sendEmail(
+            user.email,
+            `Invoice ${invoice.invoiceNumber}`,
+            `
+          <h2>Delivery Completed</h2>
+          <p>Your order has been delivered successfully.</p>
+          <p>Your invoice is attached with this email.</p>
+        `,
+            [
+              {
+                filename: `${invoice.invoiceNumber}.pdf`,
+                content: pdfBuffer,
+                contentType: "application/pdf",
+              },
+            ],
+          );
+
+          console.log("INVOICE EMAIL SENT TO:", user.email);
+        }
+
+        console.log("INVOICE FLOW COMPLETED");
+        console.log("=================================");
+      } catch (error) {
+        console.error("INVOICE FLOW ERROR:", error);
+      }
     }
 
     emitOrderUpdate(savedOrder.user, savedOrder, { admin: true });

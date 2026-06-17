@@ -7,18 +7,19 @@ exports.getAdminPricingAnalytics = async (req, res) => {
     let dateFilter = {};
 
     if (range === "today") {
-      dateFilter.createdAt = { $gte: startOfDay(new Date()) };
+      dateFilter.deliveredAt = { $gte: startOfDay(new Date()) };
     }
 
     if (range === "week") {
-      dateFilter.createdAt = { $gte: startOfWeek(new Date()) };
+      dateFilter.deliveredAt = { $gte: startOfWeek(new Date()) };
     }
 
     if (range === "month") {
-      dateFilter.createdAt = { $gte: startOfMonth(new Date()) };
+      dateFilter.deliveredAt = { $gte: startOfMonth(new Date()) };
     }
 
     const orders = await Order.find({
+      status: "DELIVERED",
       "pricingSnapshot.finalPrice": { $exists: true },
       ...dateFilter,
     });

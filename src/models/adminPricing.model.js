@@ -20,7 +20,10 @@ const adminPricingSchema = new mongoose.Schema(
 
     vehicleOverrides: [
       {
-        type: { type: String }, // bike, car, van
+        type: {
+          type: String,
+          enum: ["1", "2", "3", "5", "8"],
+        },
         multiplier: { type: Number, default: 1 },
       },
     ],

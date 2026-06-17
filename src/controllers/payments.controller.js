@@ -79,14 +79,120 @@ const getLedger = async (req, res, next) => {
     const wallet = await Wallet.findOne({ user: req.user._id });
 
     if (!wallet) {
-      return sendSuccess(res, [], "No ledger entries");
+      return sendSuccess(
+        res,
+        {
+          items: [],
+          pagination: {
+            page: 1,
+            limit: 20,
+            total: 0,
+            pages: 0,
+          },
+        },
+        "No ledger entries",
+      );
     }
 
-    const ledger = await LedgerEntry.find({ wallet: wallet._id }).sort({
-      createdAt: -1,
+    const page = Number(req.query.page) || 1;
+    const limit = Number(req.query.limit) || 20;
+    const skip = (page - 1) * limit;
+
+    const { type, search } = req.query;
+
+    const filter = {
+      wallet: wallet._id,
+    };
+
+    if (type && type !== "ALL") {
+      filter.type = type;
+    }
+
+    if (search) {
+      filter.$or = [
+        {
+          reason: {
+            $regex: search,
+            $options: "i",
+          },
+        },
+        {
+          reference: {
+            $regex: search,
+            $options: "i",
+          },
+        },
+      ];
+    }
+
+    const total = await LedgerEntry.countDocuments(filter);
+
+    const items = await LedgerEntry.find(filter)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
+
+    return sendSuccess(
+      res,
+      {
+        items,
+        pagination: {
+          page,
+          limit,
+          total,
+          pages: Math.ceil(total / limit),
+        },
+      },
+      "Ledger fetched",
+    );
+  } catch (err) {
+    next(err);
+  }
+};
+
+// GET WALLET SUMMARY
+
+const getWalletSummary = async (req, res, next) => {
+  try {
+    const wallet = await getWallet(req.user._id);
+
+    const creditTransactions = await LedgerEntry.countDocuments({
+      wallet: wallet._id,
+      type: "CREDIT",
     });
 
-    return sendSuccess(res, ledger, "Ledger fetched");
+    const debitTransactions = await LedgerEntry.countDocuments({
+      wallet: wallet._id,
+      type: "DEBIT",
+    });
+
+    return sendSuccess(
+      res,
+      {
+        availableBalance: wallet.balance,
+
+        withdrawableBalance: wallet.withdrawableBalance,
+
+        totalCredits: wallet.totalCredits,
+
+        totalDebits: wallet.totalDebits,
+
+        transactionCount: wallet.transactionCount,
+
+        creditTransactions,
+
+        debitTransactions,
+
+        pendingSettlement: wallet.pendingSettlement,
+
+        currency: wallet.currency,
+
+        status: wallet.status,
+
+        lastTransactionAt: wallet.lastTransactionAt,
+      },
+      "Wallet summary fetched",
+    );
   } catch (err) {
     next(err);
   }
@@ -154,10 +260,15 @@ const refundPayment = async (req, res, next) => {
 
 module.exports = {
   getPaymentMethods,
+
   payIn,
   payOut,
+
   getWalletBalance,
+  getWalletSummary,
   getLedger,
+
   createPaymentIntentAndGatewayOrder,
+
   refundPayment,
 };
