@@ -71,7 +71,10 @@ const paymentIntentSchema = new mongoose.Schema(
   { timestamps: true },
 );
 
-paymentIntentSchema.index({ gatewayOrderId: 1 });
+paymentIntentSchema.index(
+  { gatewayOrderId: 1 },
+  { unique: true, sparse: true },
+);
 paymentIntentSchema.index(
   { gatewayPaymentId: 1 },
   { unique: true, sparse: true },

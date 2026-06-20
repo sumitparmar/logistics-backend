@@ -45,19 +45,26 @@ const createOrderService = async (data) => {
     }
   }
 
-  const stops = data.stops || [
+  const dropStops =
+    Array.isArray(data.stops) && data.stops.length > 0
+      ? data.stops.filter((s) => s.type === "DROP")
+      : [
+          {
+            type: "DROP",
+            ...data.drop,
+            name: data.drop?.name || null,
+            phone: data.drop?.phone || null,
+          },
+        ];
+
+  const stops = [
     {
       type: "PICKUP",
       ...data.pickup,
       name: data.customer?.name,
       phone: data.customer?.phone,
     },
-    {
-      type: "DROP",
-      ...data.drop,
-      name: data.stops?.[1]?.name || data.drop?.name || null,
-      phone: data.stops?.[1]?.phone || data.drop?.phone || data.customer?.phone,
-    },
+    ...dropStops,
   ];
 
   const recentExisting = await Order.findOne({
@@ -69,7 +76,10 @@ const createOrderService = async (data) => {
 
   if (
     recentExisting &&
-    ["CREATED", "ASSIGNED"].includes(recentExisting.status)
+    ["CREATED", "ASSIGNED", "PICKED_UP", "IN_TRANSIT"].includes(
+      recentExisting.status,
+    ) &&
+    String(recentExisting.vehicleTypeId) === String(data.vehicleTypeId)
   ) {
     const err = new Error("Similar order already created recently");
     err.statusCode = 409;
@@ -139,7 +149,10 @@ const createOrderService = async (data) => {
     throwProviderError(priceResponse);
   }
 
-  if (!priceResponse?.order?.payment_amount) {
+  if (
+    priceResponse?.order?.payment_amount === undefined ||
+    priceResponse?.order?.payment_amount === null
+  ) {
     throw new Error("Price calculation failed");
   }
 
@@ -172,6 +185,18 @@ const createOrderService = async (data) => {
   const finalAmount = Number(adjustedAmount.toFixed(2));
 
   const snapshot = {
+    marginAmount: Number(
+      (baseAmount * ((pricingConfig.marginPercent || 0) / 100)).toFixed(2),
+    ),
+
+    platformFeeAmount: Number(
+      (pricingConfig.baseFees?.platformFee || 0).toFixed(2),
+    ),
+
+    handlingFeeAmount: Number(
+      (pricingConfig.baseFees?.handlingFee || 0).toFixed(2),
+    ),
+
     basePrice: baseAmount,
 
     marginPercent: pricingConfig.marginPercent,
@@ -191,9 +216,11 @@ const createOrderService = async (data) => {
         (v) => String(v.type) === String(data.vehicleTypeId),
       )?.multiplier || 1,
 
-    insurancePercent: pricingConfig.extras?.insurancePercent || 0,
+    insurancePercent: null,
+
     insuranceFeeAmount: insuranceCharge,
-    codFee: pricingConfig.extras?.codFee || 0,
+
+    codFee: Number(priceResponse?.order?.cod_fee_amount || 0),
 
     finalPrice: finalAmount,
   };
@@ -260,7 +287,9 @@ const createOrderService = async (data) => {
   const vehicleTypeFromProvider =
     createResponse.order.vehicle_type_id || validVehicle.id;
   const mappedStatus = mapBorzoStatus(providerStatus);
-
+  console.log("BORZO STATUS:", providerStatus);
+  console.log("MAPPED STATUS:", mappedStatus);
+  console.log("FINAL STATUS:", transitionStatus(null, mappedStatus));
   const order = new Order({
     pricingSnapshot: snapshot,
     borzoOrderId: String(createResponse.order.order_id),
@@ -292,8 +321,13 @@ const createOrderService = async (data) => {
       amount: data.cod?.amount ? Number(data.cod.amount) : 0,
     },
 
-    status: transitionStatus(null, mappedStatus),
-    statusHistory: [{ status: transitionStatus(null, mappedStatus) }],
+    status: transitionStatus(null, mappedStatus) || "CREATED",
+
+    statusHistory: [
+      {
+        status: transitionStatus(null, mappedStatus) || "CREATED",
+      },
+    ],
 
     provider: "BORZO",
 
@@ -607,12 +641,14 @@ const syncOrderService = async (id, userId) => {
       phone: courier.phone || null,
       //  Live location preserve karo
       location: {
-        lat: courier.latitude
-          ? Number(courier.latitude)
-          : order.courier?.location?.lat || null,
-        lng: courier.longitude
-          ? Number(courier.longitude)
-          : order.courier?.location?.lng || null,
+        lat:
+          courier.latitude !== undefined && courier.latitude !== null
+            ? Number(courier.latitude)
+            : order.courier?.location?.lat || null,
+        lng:
+          courier.longitude !== undefined && courier.longitude !== null
+            ? Number(courier.longitude)
+            : order.courier?.location?.lng || null,
       },
     };
   }
@@ -736,7 +772,10 @@ const calculateOrderService = async (data) => {
     throwProviderError(response);
   }
 
-  if (!response?.order?.payment_amount) {
+  if (
+    response?.order?.payment_amount === undefined ||
+    response?.order?.payment_amount === null
+  ) {
     throw new Error("Price calculation failed from provider");
   }
   const baseAmount = toMoneyNumber(response.order.payment_amount);
@@ -794,8 +833,13 @@ const editOrderService = async (id, userId, data) => {
 
   const payload = mapEditPayload(order.borzoOrderId, data, order);
   // chatgpt change
-  const response = await pulseService.editOrder(payload);
+  let response;
 
+  try {
+    response = await pulseService.editOrder(payload);
+  } catch (err) {
+    throwProviderError(err);
+  }
   if (!response?.is_successful) {
     const mapped = mapProviderError(response);
 
@@ -865,12 +909,19 @@ const editOrderService = async (id, userId, data) => {
     const calculatePayload = mapCalculatePayload({
       matter: order.package.description,
       vehicleTypeId: order.vehicleTypeId,
+
       pickup: {
         address: order.pickup.address,
+        lat: order.pickup.lat,
+        lng: order.pickup.lng,
       },
+
       drop: {
         address: order.drop.address,
+        lat: order.drop.lat,
+        lng: order.drop.lng,
       },
+
       deliveryType: order.deliveryType,
     });
 
@@ -916,6 +967,18 @@ const editOrderService = async (id, userId, data) => {
       order.pricingSnapshot = {
         basePrice: baseAmount,
 
+        marginAmount: Number(
+          (baseAmount * ((pricingConfig.marginPercent || 0) / 100)).toFixed(2),
+        ),
+
+        platformFeeAmount: Number(
+          (pricingConfig.baseFees?.platformFee || 0).toFixed(2),
+        ),
+
+        handlingFeeAmount: Number(
+          (pricingConfig.baseFees?.handlingFee || 0).toFixed(2),
+        ),
+
         marginPercent: pricingConfig.marginPercent,
 
         platformFee: pricingConfig.baseFees?.platformFee || 0,
@@ -930,12 +993,13 @@ const editOrderService = async (id, userId, data) => {
           pricingConfig.vehicleOverrides?.find(
             (v) => String(v.type) === String(order.vehicleTypeId),
           )?.multiplier || 1,
+        insurancePercent: null,
 
-        insurancePercent: pricingConfig.extras?.insurancePercent || 0,
         insuranceFeeAmount: Number(
           priceResponse.order.insurance_fee_amount || 0,
         ),
-        codFee: pricingConfig.extras?.codFee || 0,
+
+        codFee: Number(priceResponse.order.cod_fee_amount || 0),
 
         finalPrice: finalAmount,
       };
@@ -987,7 +1051,12 @@ const getCourierInfoService = async (id, userId) => {
   const courier = response.courier;
 
   //  DB mein bhi location save karo agar available hai
-  if (courier.latitude && courier.longitude) {
+  if (
+    courier.latitude !== undefined &&
+    courier.latitude !== null &&
+    courier.longitude !== undefined &&
+    courier.longitude !== null
+  ) {
     await Order.findByIdAndUpdate(id, {
       "courier.location.lat": Number(courier.latitude),
       "courier.location.lng": Number(courier.longitude),
@@ -1082,13 +1151,14 @@ const getTrackingService = async (id, userId) => {
           phone: courier.phone || null,
           photoUrl: courier.photo_url || courier.photoUrl || null,
           latitude:
-            courier.latitude || courier.location?.lat
-              ? Number(courier.latitude || courier.location?.lat)
-              : null,
+            courier.latitude !== undefined && courier.latitude !== null
+              ? Number(courier.latitude)
+              : (courier.location?.lat ?? null),
+
           longitude:
-            courier.longitude || courier.location?.lng
-              ? Number(courier.longitude || courier.location?.lng)
-              : null,
+            courier.longitude !== undefined && courier.longitude !== null
+              ? Number(courier.longitude)
+              : (courier.location?.lng ?? null),
         }
       : null,
   };

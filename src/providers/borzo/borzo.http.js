@@ -59,7 +59,6 @@ const client = async (config) => {
   logger.info("BORZO REQUEST", {
     method: config.method,
     url: config.url,
-    data: config.data,
   });
 
   try {
@@ -75,7 +74,10 @@ const client = async (config) => {
     logger.error("BORZO ERROR", {
       url: config.url,
       status: error.response?.status,
-      data: error.response?.data,
+      data:
+        typeof error.response?.data === "object"
+          ? JSON.stringify(error.response.data).slice(0, 2000)
+          : error.response?.data,
       message: error.message,
     });
 

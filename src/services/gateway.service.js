@@ -1,10 +1,13 @@
 const razorpay = require("../providers/razorpay.provider");
 
 const createGatewayOrder = async ({ amount, currency }) => {
+  if (!Number.isFinite(Number(amount)) || Number(amount) <= 0) {
+    throw new Error("Invalid payment amount");
+  }
   if (process.env.PAYMENT_GATEWAY_MODE === "MOCK") {
     return {
       id: `mock_order_${Date.now()}`,
-      amount: Number(amount) * 100,
+      amount: Math.round(Number(amount) * 100),
       currency,
     };
   }
@@ -14,7 +17,7 @@ const createGatewayOrder = async ({ amount, currency }) => {
   }
 
   return razorpay.orders.create({
-    amount: Number(amount) * 100,
+    amount: Math.round(Number(amount) * 100),
     currency,
   });
 };

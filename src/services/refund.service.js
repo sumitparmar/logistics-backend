@@ -1,6 +1,5 @@
 const PaymentIntent = require("../models/PaymentIntent");
-const { debitWallet } = require("./wallet.service");
-
+const { creditWallet } = require("./wallet.service");
 const requestRefund = async ({ intentId, reason }) => {
   const intent = await PaymentIntent.findById(intentId);
 
@@ -22,20 +21,29 @@ const requestRefund = async ({ intentId, reason }) => {
 };
 
 const completeRefund = async ({ gatewayOrderId }) => {
-  const intent = await PaymentIntent.findOne({
-    gatewayOrderId,
-    status: { $in: ["REFUND_REQUESTED", "REFUND_PROCESSING"] },
-  });
+  const intent = await PaymentIntent.findOneAndUpdate(
+    {
+      gatewayOrderId,
+      status: "REFUND_REQUESTED",
+    },
+    {
+      $set: {
+        status: "REFUND_PROCESSING",
+      },
+      $push: {
+        statusHistory: {
+          status: "REFUND_PROCESSING",
+        },
+      },
+    },
+    {
+      new: true,
+    },
+  );
 
   if (!intent) return null;
 
-  // Mark processing
-  intent.status = "REFUND_PROCESSING";
-  intent.statusHistory.push({ status: "REFUND_PROCESSING" });
-  await intent.save();
-
-  // Debit wallet (only once)
-  await debitWallet({
+  await creditWallet({
     userId: intent.user,
     amount: intent.amount,
     reason: "PAYMENT_REFUND",

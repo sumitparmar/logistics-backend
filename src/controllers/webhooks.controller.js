@@ -150,7 +150,9 @@ const borzoDeliveryWebhook = async (req, res) => {
     }
     order.status = transitionStatus(order.status, mappedStatus);
 
-    if (mappedStatus === "DELIVERED" && !order.deliveredAt) {
+    const isFirstDelivery = mappedStatus === "DELIVERED" && !order.deliveredAt;
+
+    if (isFirstDelivery) {
       order.deliveredAt = new Date();
     }
 
@@ -158,6 +160,7 @@ const borzoDeliveryWebhook = async (req, res) => {
     if (
       mappedStatus === "DELIVERED" &&
       order.cod?.enabled === true &&
+      Number(order.cod?.amount || 0) > 0 &&
       order.codSettled !== true
     ) {
       await creditWallet({
@@ -186,15 +189,15 @@ const borzoDeliveryWebhook = async (req, res) => {
       deliveryId: delivery.delivery_id,
       status: delivery.status,
       statusDescription: delivery.status_description,
-      statusDatetime: new Date(delivery.status_datetime),
+      statusDatetime: delivery.status_datetime
+        ? new Date(delivery.status_datetime)
+        : null,
       trackingUrl: delivery.tracking_url || null,
     };
 
     const savedOrder = await order.save();
 
-    if (mappedStatus === "DELIVERED") {
-      console.log("INVOICE FLOW STARTED");
-
+    if (isFirstDelivery) {
       const invoice = await createInvoiceForOrder(savedOrder);
 
       const user = await User.findById(savedOrder.user);
@@ -221,8 +224,6 @@ const borzoDeliveryWebhook = async (req, res) => {
               },
             ],
           );
-
-          console.log(`INVOICE EMAIL SENT TO: ${user.email}`);
         } catch (emailError) {
           console.error("INVOICE EMAIL FAILED:", emailError.message);
         }

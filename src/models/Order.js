@@ -139,7 +139,18 @@ const orderSchema = new mongoose.Schema(
         type: Boolean,
         default: false,
       },
+
       amount: {
+        type: Number,
+        default: 0,
+      },
+
+      collectedAmount: {
+        type: Number,
+        default: 0,
+      },
+
+      codFee: {
         type: Number,
         default: 0,
       },
@@ -199,16 +210,27 @@ const orderSchema = new mongoose.Schema(
 
     pricingSnapshot: {
       basePrice: Number,
+
       marginPercent: Number,
+      marginAmount: Number,
+
       platformFee: Number,
+      platformFeeAmount: Number,
+
       handlingFee: Number,
+      handlingFeeAmount: Number,
+
       surgeMultiplier: Number,
       surgeApplied: Boolean,
+
       vehicleType: String,
       vehicleMultiplier: Number,
+
       insurancePercent: Number,
       insuranceFeeAmount: Number,
+
       codFee: Number,
+
       finalPrice: Number,
     },
 

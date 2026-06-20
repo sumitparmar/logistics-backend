@@ -379,7 +379,7 @@ const mapEditPayload = (borzoOrderId, data, existingOrder) => {
     order_id: Number(borzoOrderId),
   };
 
-  if (data.matter) {
+  if (data.matter !== undefined) {
     payload.matter = data.matter;
   }
 
@@ -387,10 +387,10 @@ const mapEditPayload = (borzoOrderId, data, existingOrder) => {
     payload.total_weight_kg = Number(data.total_weight_kg);
   }
 
-  if (data.vehicle_type_id) {
-    payload.vehicle_type_id = Number(data.vehicle_type_id);
+  const vehicleTypeId = data.vehicleTypeId || data.vehicle_type_id;
+  if (vehicleTypeId !== undefined && vehicleTypeId !== null) {
+    payload.vehicle_type_id = Number(vehicleTypeId);
   }
-
   const providerOrder =
     existingOrder?.rawProviderResponse?.order ||
     existingOrder?.rawProviderResponse?.orders?.[0];
@@ -408,8 +408,13 @@ const mapEditPayload = (borzoOrderId, data, existingOrder) => {
         const point = {
           point_id: existingPoint.point_id,
           address: p.address,
-          latitude: String(p.latitude),
-          longitude: String(p.longitude),
+          ...(p.latitude !== undefined && p.latitude !== null
+            ? { latitude: String(p.latitude) }
+            : {}),
+
+          ...(p.longitude !== undefined && p.longitude !== null
+            ? { longitude: String(p.longitude) }
+            : {}),
           contact_person: {
             name: existingPoint.contact_person?.name || null,
             phone: normalizeBorzoPhone(existingPoint.contact_person?.phone),

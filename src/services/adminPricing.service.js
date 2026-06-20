@@ -14,8 +14,7 @@ function applyAdminPricing({ basePrice, config, vehicleType }) {
   const vehicle = config.vehicleOverrides?.find(
     (v) => String(v.type) === String(vehicleType),
   );
-
-  if (vehicle) {
+  if (vehicle?.multiplier && vehicle.multiplier > 0) {
     price *= vehicle.multiplier;
   }
 
@@ -34,7 +33,7 @@ function applyAdminPricing({ basePrice, config, vehicleType }) {
     }
   }
 
-  return Math.round(price);
+  return Number(price.toFixed(2));
 }
 
 module.exports = { applyAdminPricing };

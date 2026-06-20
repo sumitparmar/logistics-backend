@@ -41,6 +41,9 @@ const creditWallet = async ({
   const wallet = await getWallet(userId);
 
   const creditAmount = Number(amount);
+  if (!Number.isFinite(creditAmount) || creditAmount <= 0) {
+    throw new Error("Invalid credit amount");
+  }
 
   await Wallet.updateOne(
     { _id: wallet._id },
@@ -82,6 +85,9 @@ const debitWallet = async ({ userId, amount, reason, reference, metadata }) => {
   const wallet = await getWallet(userId);
 
   const debitAmount = Number(amount);
+  if (!Number.isFinite(debitAmount) || debitAmount <= 0) {
+    throw new Error("Invalid debit amount");
+  }
 
   const result = await Wallet.updateOne(
     {

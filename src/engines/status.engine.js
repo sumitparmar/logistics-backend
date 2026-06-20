@@ -21,8 +21,9 @@ const STATUS_ORDER = [
 
 function transitionStatus(currentStatus, nextStatus) {
   // first ever status
-  if (!currentStatus) return nextStatus;
-
+  if (!currentStatus || !nextStatus) {
+    return currentStatus || null;
+  }
   // same status
   if (currentStatus === nextStatus) return currentStatus;
 

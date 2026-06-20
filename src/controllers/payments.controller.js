@@ -95,7 +95,7 @@ const getLedger = async (req, res, next) => {
     }
 
     const page = Number(req.query.page) || 1;
-    const limit = Number(req.query.limit) || 20;
+    const limit = Math.min(Number(req.query.limit) || 20, 100);
     const skip = (page - 1) * limit;
 
     const { type, search } = req.query;
@@ -239,6 +239,12 @@ const createPaymentIntentAndGatewayOrder = async (req, res, next) => {
 const refundPayment = async (req, res, next) => {
   try {
     const { intentId, reason } = req.body;
+
+    if (!intentId) {
+      const err = new Error("intentId is required");
+      err.statusCode = 400;
+      throw err;
+    }
 
     const intent = await requestRefund({
       intentId,

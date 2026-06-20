@@ -11,6 +11,9 @@ class BorzoProvider extends LogisticsProvider {
   }
 
   async getOrder(orderId) {
+    if (!orderId) {
+      throw new Error("Order ID is required");
+    }
     return client.get("/orders", {
       params: {
         order_id: Number(orderId),
@@ -41,6 +44,9 @@ class BorzoProvider extends LogisticsProvider {
   }
 
   async getCourierInfo(orderId) {
+    if (!orderId) {
+      throw new Error("Order ID is required");
+    }
     return client.get("/courier", {
       params: {
         order_id: Number(orderId),

@@ -36,7 +36,10 @@ const createOrder = async (req, res, next) => {
       return sendError(res, "Package details are required", 400);
     }
 
-    if (!["NOW", "EOD", "END_OF_DAY", "SCHEDULED"].includes(deliveryType)) {
+    if (
+      deliveryType &&
+      !["NOW", "EOD", "END_OF_DAY", "SCHEDULED"].includes(deliveryType)
+    ) {
       return sendError(res, "Invalid delivery type", 400);
     }
 
@@ -280,6 +283,10 @@ const getProviderHistory = async (req, res, next) => {
 
 const createBulkOrders = async (req, res, next) => {
   try {
+    if (!Array.isArray(req.body.orders)) {
+      return sendError(res, "orders must be an array", 400);
+    }
+
     const results = await createBulkOrdersService(
       req.body.orders,
       req.user._id,

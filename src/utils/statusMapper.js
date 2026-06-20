@@ -1,7 +1,7 @@
 const { ORDER_STATUS } = require("../engines/status.engine");
 
 function mapBorzoStatus(borzoStatus) {
-  switch (borzoStatus) {
+  switch (String(borzoStatus).toLowerCase()) {
     // ===== BORZO ORDER STATUSES =====
     case "new":
       return ORDER_STATUS.CREATED;
@@ -28,8 +28,8 @@ function mapBorzoStatus(borzoStatus) {
       return ORDER_STATUS.CANCELLED;
 
     // ===== BORZO DELIVERY STATUSES =====
-    case "planned": // No courier yet
-      return ORDER_STATUS.ASSIGNED;
+    case "planned":
+      return ORDER_STATUS.CREATED;
 
     case "courier_assigned": // Courier assigned, not departed
       return ORDER_STATUS.ASSIGNED;
@@ -82,7 +82,7 @@ function mapBorzoStatus(borzoStatus) {
       return ORDER_STATUS.FAILED;
 
     default:
-      return ORDER_STATUS.CREATED;
+      return null;
   }
 }
 

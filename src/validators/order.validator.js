@@ -78,21 +78,21 @@ const createOrderSchema = Joi.object({
   }),
   customer: Joi.object({
     name: Joi.string().required(),
-    phone: Joi.string().required(),
+    phone: Joi.string().optional(),
   }).required(),
 
   // Backward compatible
   pickup: Joi.object({
     address: Joi.string().required(),
-    lat: Joi.number().optional(),
-    lng: Joi.number().optional(),
-  }).optional(),
+    lat: Joi.number().required(),
+    lng: Joi.number().required(),
+  }).required(),
 
   drop: Joi.object({
     address: Joi.string().required(),
-    lat: Joi.number().optional(),
-    lng: Joi.number().optional(),
-  }).optional(),
+    lat: Joi.number().required(),
+    lng: Joi.number().required(),
+  }).required(),
 
   // NEW preferred structure
   stops: Joi.array()

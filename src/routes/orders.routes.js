@@ -95,8 +95,7 @@ router.get("/:id/history", protect, getProviderHistory);
 
 router.get("/:id/pricing-breakdown", protect, getPricingBreakdown);
 
-router.get("/:id/tracking", getTracking); // public — no auth required
-
+router.get("/:id/tracking", protect, getTracking);
 router.get("/:id/pod", protect, getPOD);
 
 router.get("/:id/documents", protect, getDocuments);
