@@ -22,6 +22,9 @@ const adminNotificationSchema = new mongoose.Schema(
       ref: "AdminSupportTicket",
     },
 
+    actionLabel: String,
+    actionUrl: String,
+
     meta: {
       orderId: { type: mongoose.Schema.Types.ObjectId, ref: "Order" },
       driverId: { type: mongoose.Schema.Types.ObjectId, ref: "Driver" },

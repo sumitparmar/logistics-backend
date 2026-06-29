@@ -20,9 +20,14 @@ const STATUS_ORDER = [
 ];
 
 function transitionStatus(currentStatus, nextStatus) {
-  // first ever status
-  if (!currentStatus || !nextStatus) {
-    return currentStatus || null;
+  // first status assignment
+  if (!currentStatus && nextStatus) {
+    return nextStatus;
+  }
+
+  // invalid update
+  if (currentStatus && !nextStatus) {
+    return currentStatus;
   }
   // same status
   if (currentStatus === nextStatus) return currentStatus;

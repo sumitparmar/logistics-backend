@@ -662,15 +662,17 @@ const syncOrderService = async (id, userId) => {
     borzoOrder.points?.find((p) => p.delivery)?.delivery?.status || null;
 
   const previousStatus = order.status;
+  const wasDelivered = previousStatus === "DELIVERED";
 
   const mappedStatus = deliveryStatus
     ? mapDeliveryStatus(deliveryStatus)
     : mapBorzoStatus(borzoStatus);
-  const wasDelivered = order.status === "DELIVERED";
 
-  order.status = transitionStatus(order.status, mappedStatus);
+  const nextStatus = transitionStatus(order.status, mappedStatus);
 
-  if (mappedStatus === "DELIVERED" && !order.deliveredAt) {
+  order.status = nextStatus;
+
+  if (nextStatus === "DELIVERED" && !order.deliveredAt) {
     order.deliveredAt = new Date();
   }
 
@@ -685,10 +687,11 @@ const syncOrderService = async (id, userId) => {
   }
 
   if (
-    order.statusHistory.length === 0 ||
-    order.statusHistory[order.statusHistory.length - 1].status !== mappedStatus
+    nextStatus &&
+    (order.statusHistory.length === 0 ||
+      order.statusHistory[order.statusHistory.length - 1].status !== nextStatus)
   ) {
-    order.statusHistory.push({ status: mappedStatus });
+    order.statusHistory.push({ status: nextStatus });
   }
 
   order.rawProviderResponse = response;
@@ -909,6 +912,11 @@ const editOrderService = async (id, userId, data) => {
     const calculatePayload = mapCalculatePayload({
       matter: order.package.description,
       vehicleTypeId: order.vehicleTypeId,
+
+      package: {
+        weight: order.package?.weight || 0,
+        declaredValue: order.package?.declaredValue || 0,
+      },
 
       pickup: {
         address: order.pickup.address,

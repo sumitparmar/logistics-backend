@@ -19,6 +19,25 @@ const adminSupportMessageSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
+
+    attachments: [
+      {
+        url: String,
+        fileName: String,
+        mimeType: String,
+        size: Number,
+      },
+    ],
+
+    readByUser: {
+      type: Boolean,
+      default: false,
+    },
+
+    readByAdmin: {
+      type: Boolean,
+      default: false,
+    },
   },
   {
     timestamps: true,

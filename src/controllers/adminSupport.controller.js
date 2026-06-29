@@ -24,7 +24,14 @@ const getSupportTickets = async (req, res) => {
     }
 
     if (req.query.status) {
-      query.status = req.query.status;
+      const statuses = Array.isArray(req.query.status)
+        ? req.query.status
+        : String(req.query.status)
+            .split(",")
+            .map((status) => status.trim())
+            .filter(Boolean);
+
+      query.status = statuses.length > 1 ? { $in: statuses } : statuses[0];
     }
 
     if (search && search.trim().length >= 2) {
@@ -86,6 +93,11 @@ const getSupportTickets = async (req, res) => {
 const AdminSupportMessage = require("../models/AdminSupportMessage");
 
 // GET SINGLE TICKET
+const canAccessTicket = (req, ticket) => {
+  if (req.user?.role === "admin") return true;
+  return ticket.user && String(ticket.user._id || ticket.user) === String(req.user?._id);
+};
+
 const getSupportTicketById = async (req, res) => {
   try {
     const ticket = await AdminSupportTicket.findById(req.params.id)
@@ -99,6 +111,13 @@ const getSupportTicketById = async (req, res) => {
       return res.status(404).json({
         success: false,
         message: "Ticket not found",
+      });
+    }
+
+    if (req.user && !canAccessTicket(req, ticket)) {
+      return res.status(403).json({
+        success: false,
+        message: "You do not have access to this ticket",
       });
     }
 
@@ -164,6 +183,14 @@ const replyToSupportTicket = async (req, res) => {
       message,
     });
 
+    ticketExists.unreadForUser += 1;
+    ticketExists.unreadForAdmin = 0;
+
+    ticketExists.lastMessageAt = new Date();
+    ticketExists.lastRepliedBy = "admin";
+
+    await ticketExists.save();
+
     const io = getIO();
 
     // get full updated ticket with messages
@@ -204,11 +231,102 @@ const replyToSupportTicket = async (req, res) => {
   }
 };
 
-const allowedStatus = ["open", "in-progress", "resolved"];
+const replyToSupportTicketAsUser = async (req, res) => {
+  try {
+    const { message } = req.body;
 
+    if (!message?.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "Message is required",
+      });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid ticket ID",
+      });
+    }
+
+    const ticket = await AdminSupportTicket.findById(req.params.id);
+
+    if (!ticket) {
+      return res.status(404).json({
+        success: false,
+        message: "Ticket not found",
+      });
+    }
+
+    if (!canAccessTicket(req, ticket)) {
+      return res.status(403).json({
+        success: false,
+        message: "You do not have access to this ticket",
+      });
+    }
+
+    if (["RESOLVED", "CLOSED"].includes(ticket.status)) {
+      ticket.status = "REOPENED";
+    }
+
+    const newMessage = await AdminSupportMessage.create({
+      ticket: ticket._id,
+      sender: "user",
+      message: message.trim(),
+      readByUser: true,
+    });
+
+    ticket.unreadForAdmin += 1;
+    ticket.unreadForUser = 0;
+    ticket.lastMessageAt = new Date();
+    ticket.lastRepliedBy = "user";
+    await ticket.save();
+
+    const updatedTicket = await AdminSupportTicket.findById(ticket._id)
+      .populate("user", "name email phone")
+      .lean();
+
+    const messages = await AdminSupportMessage.find({ ticket: ticket._id })
+      .sort({ createdAt: 1 })
+      .lean();
+
+    const io = getIO();
+    io.to("admin").emit("ticket_updated", {
+      ...updatedTicket,
+      messages,
+    });
+
+    return res.json({
+      success: true,
+      data: newMessage,
+    });
+  } catch (error) {
+    console.error("replyToSupportTicketAsUser error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Reply failed",
+    });
+  }
+};
+
+const allowedStatus = [
+  "OPEN",
+  "IN_PROGRESS",
+  "WAITING_CUSTOMER",
+  "RESOLVED",
+  "CLOSED",
+  "REOPENED",
+];
 const updateSupportTicketStatus = async (req, res) => {
   try {
     const { status } = req.body;
+
+    if (!allowedStatus.includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid ticket status",
+      });
+    }
 
     const ticket = await AdminSupportTicket.findById(req.params.id);
 
@@ -220,7 +338,7 @@ const updateSupportTicketStatus = async (req, res) => {
     }
 
     //  LOCK: prevent changing resolved ticket directly
-    if (ticket.status === "resolved" && status !== "in-progress") {
+    if (ticket.status === "RESOLVED" && status !== "REOPENED") {
       return res.status(400).json({
         success: false,
         message: "Resolved ticket can only be reopened",
@@ -228,6 +346,8 @@ const updateSupportTicketStatus = async (req, res) => {
     }
 
     ticket.status = status;
+    if (status === "RESOLVED") ticket.resolvedAt = new Date();
+    if (status === "CLOSED") ticket.closedAt = new Date();
     await ticket.save();
 
     const io = getIO();
@@ -247,6 +367,13 @@ const updateSupportTicketStatus = async (req, res) => {
       messages,
     });
 
+    if (updatedTicket.user?._id) {
+      io.to(`user:${updatedTicket.user._id}`).emit("ticket_updated", {
+        ...updatedTicket,
+        messages,
+      });
+    }
+
     return res.json({
       success: true,
       data: ticket,
@@ -262,13 +389,14 @@ const updateSupportTicketStatus = async (req, res) => {
 
 const createSupportTicket = async (req, res) => {
   try {
-    const { userId, subject, priority = "medium" } = req.body;
+    const { subject, priority = "medium" } = req.body;
+    const userId = req.user?._id || req.body.userId;
 
     //  REQUIRED FIELD CHECK
-    if (!subject) {
+    if (!subject || !req.body.message?.trim()) {
       return res.status(400).json({
         success: false,
-        message: "userId and subject are required",
+        message: "Subject and message are required",
       });
     }
 
@@ -297,13 +425,27 @@ const createSupportTicket = async (req, res) => {
 
     const ticket = await AdminSupportTicket.create({
       user: userId || null,
-      name,
-      email,
-      phone,
+      name: userExists?.name || name,
+      email: userExists?.email || email,
+      phone: userExists?.phone || phone,
+      order: mongoose.Types.ObjectId.isValid(req.body.order)
+        ? req.body.order
+        : null,
       subject,
+      category: req.body.category || "OTHER",
       priority,
-      status: "open",
+      status: "OPEN",
+      unreadForAdmin: 1,
+      unreadForUser: 0,
+      lastMessageAt: new Date(),
+      lastRepliedBy: "user",
     });
+
+    ticket.ticketNumber = `MKT-TKT-${String(ticket._id)
+      .slice(-6)
+      .toUpperCase()}`;
+
+    await ticket.save();
 
     await AdminNotification.create({
       type: "SYSTEM",
@@ -317,15 +459,20 @@ const createSupportTicket = async (req, res) => {
     await AdminSupportMessage.create({
       ticket: ticket._id,
       sender: "user",
-      message: req.body.message,
+      message: req.body.message.trim(),
+      readByUser: true,
     });
 
+    const populatedTicket = await AdminSupportTicket.findById(ticket._id)
+      .populate("user", "name email phone")
+      .lean();
+
     const io = getIO();
-    io.to("admin").emit("new_ticket", ticket);
+    io.to("admin").emit("new_ticket", populatedTicket);
 
     return res.json({
       success: true,
-      data: ticket,
+      data: populatedTicket,
     });
   } catch (error) {
     console.error("createSupportTicket FULL ERROR:", error);
@@ -333,6 +480,45 @@ const createSupportTicket = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: error.message || "Failed to create ticket",
+    });
+  }
+};
+
+const markSupportTicketReadForUser = async (req, res) => {
+  try {
+    const ticket = await AdminSupportTicket.findById(req.params.id);
+
+    if (!ticket) {
+      return res.status(404).json({
+        success: false,
+        message: "Ticket not found",
+      });
+    }
+
+    if (!canAccessTicket(req, ticket)) {
+      return res.status(403).json({
+        success: false,
+        message: "You do not have access to this ticket",
+      });
+    }
+
+    ticket.unreadForUser = 0;
+    await ticket.save();
+
+    await AdminSupportMessage.updateMany(
+      { ticket: ticket._id, sender: "admin" },
+      { $set: { readByUser: true } },
+    );
+
+    return res.json({
+      success: true,
+      data: ticket,
+    });
+  } catch (error) {
+    console.error("markSupportTicketReadForUser error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to mark ticket as read",
     });
   }
 };
@@ -349,9 +535,12 @@ const getSupportTicketCounts = async (req, res) => {
     ]);
 
     const formatted = {
-      open: 0,
-      "in-progress": 0,
-      resolved: 0,
+      OPEN: 0,
+      IN_PROGRESS: 0,
+      WAITING_CUSTOMER: 0,
+      RESOLVED: 0,
+      CLOSED: 0,
+      REOPENED: 0,
     };
 
     counts.forEach((c) => {
@@ -375,7 +564,9 @@ module.exports = {
   getSupportTickets,
   getSupportTicketById,
   replyToSupportTicket,
+  replyToSupportTicketAsUser,
   updateSupportTicketStatus,
   createSupportTicket,
+  markSupportTicketReadForUser,
   getSupportTicketCounts,
 };

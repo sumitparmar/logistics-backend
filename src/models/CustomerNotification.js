@@ -15,6 +15,12 @@ const customerNotificationSchema = new mongoose.Schema(
       default: null,
     },
 
+    ticketId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "AdminSupportTicket",
+      default: null,
+    },
+
     type: {
       type: String,
       required: true,
@@ -34,6 +40,20 @@ const customerNotificationSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
       index: true,
+    },
+
+    priority: {
+      type: String,
+      enum: ["LOW", "MEDIUM", "HIGH"],
+      default: "MEDIUM",
+    },
+
+    actionLabel: String,
+    actionUrl: String,
+
+    meta: {
+      type: mongoose.Schema.Types.Mixed,
+      default: {},
     },
   },
   {

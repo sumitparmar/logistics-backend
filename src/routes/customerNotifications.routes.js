@@ -5,6 +5,8 @@ const {
   getNotifications,
   markRead,
   unreadCount,
+  markAllRead,
+  removeNotification,
 } = require("../controllers/customerNotification.controller");
 
 const router = express.Router();
@@ -15,6 +17,10 @@ router.get("/", getNotifications);
 
 router.get("/unread-count", unreadCount);
 
+router.patch("/read-all", markAllRead);
+
 router.patch("/:id/read", markRead);
+
+router.delete("/:id", removeNotification);
 
 module.exports = router;

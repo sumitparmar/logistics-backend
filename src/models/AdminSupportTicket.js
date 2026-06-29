@@ -27,14 +27,67 @@ const adminSupportTicketSchema = new mongoose.Schema(
 
     status: {
       type: String,
-      enum: ["open", "in-progress", "resolved"],
-      default: "open",
+      enum: [
+        "OPEN",
+        "IN_PROGRESS",
+        "WAITING_CUSTOMER",
+        "RESOLVED",
+        "CLOSED",
+        "REOPENED",
+      ],
+      default: "OPEN",
     },
-
     priority: {
       type: String,
       enum: ["low", "medium", "high"],
       default: "medium",
+    },
+
+    category: {
+      type: String,
+      enum: [
+        "ORDER_ISSUE",
+        "PAYMENT",
+        "REFUND",
+        "ACCOUNT",
+        "TECHNICAL",
+        "OTHER",
+      ],
+      default: "OTHER",
+    },
+
+    ticketNumber: {
+      type: String,
+      unique: true,
+      sparse: true,
+      index: true,
+    },
+
+    lastMessageAt: Date,
+
+    lastRepliedBy: {
+      type: String,
+      enum: ["user", "admin"],
+    },
+
+    unreadForUser: {
+      type: Number,
+      default: 0,
+    },
+
+    unreadForAdmin: {
+      type: Number,
+      default: 0,
+    },
+
+    resolvedAt: Date,
+
+    closedAt: Date,
+
+    rating: {
+      stars: Number,
+      feedback: String,
+      submittedAt: Date,
     },
   },
   {
