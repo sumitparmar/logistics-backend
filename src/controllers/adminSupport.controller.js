@@ -95,7 +95,10 @@ const AdminSupportMessage = require("../models/AdminSupportMessage");
 // GET SINGLE TICKET
 const canAccessTicket = (req, ticket) => {
   if (req.user?.role === "admin") return true;
-  return ticket.user && String(ticket.user._id || ticket.user) === String(req.user?._id);
+  return (
+    ticket.user &&
+    String(ticket.user._id || ticket.user) === String(req.user?._id)
+  );
 };
 
 const getSupportTicketById = async (req, res) => {

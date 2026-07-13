@@ -238,6 +238,11 @@ const orderSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+
+    walletRefunded: {
+      type: Boolean,
+      default: false,
+    },
   },
   { timestamps: true },
 );

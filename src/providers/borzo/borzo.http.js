@@ -38,9 +38,14 @@ const breakerOptions = {
 
 const breaker = new CircuitBreaker(
   async (config) => {
+    console.log("\n========== AXIOS REQUEST ==========");
+    console.log(JSON.stringify(config.data, null, 2));
+    console.log("===================================\n");
+
     const response = await axiosClient(config);
     return response;
   },
+
   {
     ...breakerOptions,
 
@@ -76,8 +81,9 @@ const client = async (config) => {
       status: error.response?.status,
       data:
         typeof error.response?.data === "object"
-          ? JSON.stringify(error.response.data).slice(0, 2000)
+          ? JSON.stringify(error.response.data, null, 2)
           : error.response?.data,
+
       message: error.message,
     });
 
@@ -87,7 +93,18 @@ const client = async (config) => {
 
 client.get = (url, options = {}) => client({ method: "get", url, ...options });
 
-client.post = (url, data, options = {}) =>
-  client({ method: "post", url, data, ...options });
+client.post = (url, data, options = {}) => {
+  console.log("\n========== RAW BORZO POST ==========");
+  console.log(url);
+  console.log(JSON.stringify(data, null, 2));
+  console.log("====================================\n");
+
+  return client({
+    method: "post",
+    url,
+    data,
+    ...options,
+  });
+};
 
 module.exports = client;

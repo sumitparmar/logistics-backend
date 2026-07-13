@@ -9,7 +9,7 @@ const { mapBorzoStatus } = require("../utils/statusMapper");
 const mapDeliveryStatus = require("../utils/deliveryStatusMapper");
 const AdminPricing = require("../models/adminPricing.model");
 const { applyAdminPricing } = require("./adminPricing.service");
-
+const LedgerEntry = require("../models/LedgerEntry");
 const {
   mapCreateOrderPayload,
   mapCalculatePayload,
@@ -27,6 +27,7 @@ const {
 } = require("./customerNotification.service");
 const mongoose = require("mongoose");
 
+const { debitWallet, creditWallet, getWallet } = require("./wallet.service");
 const toMoneyNumber = (value) => Number(Number(value || 0).toFixed(2));
 
 // CREATE ORDER
@@ -247,6 +248,15 @@ const createOrderService = async (data) => {
     }
   }
 
+  // Wallet validation
+  if (data.payment?.method === "WALLET") {
+    const wallet = await getWallet(data.user);
+
+    if (wallet.balance < finalAmount) {
+      throw new Error("Insufficient wallet balance");
+    }
+  }
+
   let createPayload = mapCreateOrderPayload(sanitizedCreateData);
   let createResponse;
 
@@ -268,6 +278,43 @@ const createOrderService = async (data) => {
 
   if (!createResponse?.order?.order_id) {
     throw new Error("Invalid Borzo response");
+  }
+
+  if (data.payment?.method === "WALLET") {
+    try {
+      await debitWallet({
+        userId: data.user,
+
+        amount: finalAmount,
+
+        reason: "ORDER_PAYMENT",
+
+        category: "ORDER",
+
+        description: `Payment for order ${createResponse.order.order_id}`,
+
+        order: null,
+
+        reference: String(createResponse.order.order_id),
+
+        metadata: {
+          provider: "BORZO",
+          borzoOrderId: String(createResponse.order.order_id),
+        },
+
+        performedBy: data.user,
+      });
+    } catch (walletError) {
+      try {
+        await pulseService.cancelOrder({
+          order_id: Number(createResponse.order.order_id),
+        });
+      } catch (cancelError) {
+        console.error("Failed to rollback Borzo order:", cancelError.message);
+      }
+
+      throw walletError;
+    }
   }
 
   const providerStatus = createResponse.order.status;
@@ -335,6 +382,20 @@ const createOrderService = async (data) => {
   });
 
   const savedOrder = await order.save();
+
+  if (data.payment?.method === "WALLET") {
+    await LedgerEntry.findOneAndUpdate(
+      {
+        reference: String(savedOrder.borzoOrderId),
+        order: null,
+      },
+      {
+        $set: {
+          order: savedOrder._id,
+        },
+      },
+    );
+  }
 
   notifyOrderCreated(savedOrder).catch(() => {});
 
@@ -606,6 +667,32 @@ const cancelOrderService = async (id, userId) => {
 
   order.rawProviderResponse = response;
 
+  if (order.payment?.method === "WALLET" && !order.walletRefunded) {
+    await creditWallet({
+      userId: order.user,
+
+      amount: order.pricing.amount,
+
+      reason: "ORDER_CANCEL_REFUND",
+
+      category: "REFUND",
+
+      description: `Refund for cancelled order ${order.borzoOrderId}`,
+
+      order: order._id,
+
+      reference: order.borzoOrderId,
+
+      metadata: {
+        provider: "BORZO",
+      },
+
+      performedBy: order.user,
+    });
+
+    order.walletRefunded = true;
+  }
+
   const savedOrder = await order.save();
 
   emitOrderUpdate(savedOrder.user, savedOrder);
@@ -681,7 +768,34 @@ const syncOrderService = async (id, userId) => {
     order.cod.collectedAmount = backpaymentAmount;
     order.cod.codFee = codFeeAmount;
 
-    if (mappedStatus === "DELIVERED" && backpaymentAmount > 0) {
+    if (
+      mappedStatus === "DELIVERED" &&
+      backpaymentAmount > 0 &&
+      !order.codSettled
+    ) {
+      await creditWallet({
+        userId: order.user,
+
+        amount: backpaymentAmount,
+
+        reason: "COD_SETTLEMENT",
+
+        category: "COD",
+
+        description: `COD settlement for order ${order.borzoOrderId}`,
+
+        order: order._id,
+
+        reference: order.borzoOrderId,
+
+        metadata: {
+          provider: "BORZO",
+          codFee: codFeeAmount,
+        },
+
+        performedBy: order.user,
+      });
+
       order.codSettled = true;
     }
   }

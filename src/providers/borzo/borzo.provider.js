@@ -3,10 +3,22 @@ const client = require("./borzo.http");
 
 class BorzoProvider extends LogisticsProvider {
   async calculatePrice(payload) {
+    console.log("\n========== BORZO CALCULATE PAYLOAD ==========");
+    console.log(JSON.stringify(payload, null, 2));
+    console.log("=============================================\n");
+
     return client.post("/calculate-order", payload);
   }
 
+  // async createOrder(payload) {
+  //   return client.post("/create-order", payload);
+  // }
+
   async createOrder(payload) {
+    console.log("\n========== BORZO CREATE PAYLOAD ==========");
+    console.log(JSON.stringify(payload, null, 2));
+    console.log("==========================================\n");
+
     return client.post("/create-order", payload);
   }
 

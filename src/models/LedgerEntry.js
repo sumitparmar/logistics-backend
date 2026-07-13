@@ -25,25 +25,61 @@ const ledgerEntrySchema = new mongoose.Schema(
     reason: {
       type: String,
       enum: [
-        "COD_SETTLEMENT",
-        "REFUND",
+        // Wallet
         "TOPUP",
         "WITHDRAWAL",
+
+        // Logistics
+        "ORDER_PAYMENT",
         "DELIVERY_CHARGE",
+        "ORDER_REFUND",
+        "ORDER_CANCEL_REFUND",
+
+        // COD
+        "COD_SETTLEMENT",
+        "COD_ADJUSTMENT",
+
+        // Payment Gateway
+        "PAYMENT_SUCCESS",
+        "PAYMENT_FAILED",
+        "PAYMENT_REFUND",
+
+        // Admin
+        "MANUAL_CREDIT",
+        "MANUAL_DEBIT",
         "ADJUSTMENT",
+
+        // Rewards
         "PROMOTIONAL_CREDIT",
+        "CASHBACK",
+        "REFERRAL_REWARD",
+
+        // Charges
         "PENALTY",
+
+        // Testing
         "TEST_CREDIT",
         "TEST_DEBIT",
       ],
+
       required: true,
       index: true,
     },
 
     category: {
       type: String,
-      default: "GENERAL",
-      trim: true,
+      enum: [
+        "PAYMENT",
+        "ORDER",
+        "COD",
+        "REFUND",
+        "WITHDRAWAL",
+        "REWARD",
+        "PENALTY",
+        "ADJUSTMENT",
+        "SYSTEM",
+      ],
+      default: "SYSTEM",
     },
 
     description: {
@@ -52,9 +88,16 @@ const ledgerEntrySchema = new mongoose.Schema(
       trim: true,
     },
 
+    order: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Order",
+      default: null,
+      index: true,
+    },
+
     status: {
       type: String,
-      enum: ["PENDING", "PROCESSING", "COMPLETED", "FAILED"],
+      enum: ["PENDING", "PROCESSING", "COMPLETED", "FAILED", "REVERSED"],
       default: "COMPLETED",
       index: true,
     },
@@ -65,9 +108,25 @@ const ledgerEntrySchema = new mongoose.Schema(
       default: null,
     },
 
+    balanceBefore: {
+      type: Number,
+      default: 0,
+    },
+
+    balanceAfter: {
+      type: Number,
+      default: 0,
+    },
+
     metadata: {
       type: Object,
       default: {},
+    },
+
+    performedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
     },
   },
   {

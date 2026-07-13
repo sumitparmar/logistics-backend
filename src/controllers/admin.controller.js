@@ -9,7 +9,7 @@ const { createInvoiceForOrder } = require("../services/invoice.service");
 const generateInvoicePdf = require("../utils/generateInvoicePdf");
 const sendEmail = require("../utils/sendEmail");
 const { creditWallet } = require("../services/wallet.service");
-
+const adminUsersService = require("../services/adminUsers.service");
 const ALL_PERMISSIONS = Object.values(adminPermissions).flatMap((module) =>
   Object.values(module),
 );
@@ -148,6 +148,26 @@ const getProviderPerformance = async (req, res) => {
     success: true,
     data: result,
   });
+};
+
+const createUser = async (req, res) => {
+  try {
+    const result = await adminUsersService.createUser(req.body);
+
+    return res.status(201).json({
+      success: true,
+      message: "User created successfully.",
+      data: result.user,
+      temporaryPassword: result.temporaryPassword,
+    });
+  } catch (error) {
+    console.error("createUser error:", error);
+
+    return res.status(400).json({
+      success: false,
+      message: error.message,
+    });
+  }
 };
 
 const getUsers = async (req, res) => {
@@ -1397,6 +1417,7 @@ module.exports = {
   getWalletBalances,
   getProviderPerformance,
   getUsers,
+  createUser,
   getUserById,
   updateUser,
   getOrders,

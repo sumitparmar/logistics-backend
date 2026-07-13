@@ -9,6 +9,7 @@ const {
   getWalletBalance,
   getWalletSummary,
   getLedger,
+  downloadStatement,
   createPaymentIntentAndGatewayOrder,
   refundPayment,
 } = require("../controllers/payments.controller");
@@ -22,6 +23,7 @@ router.get("/wallet", protect, getWalletBalance);
 router.get("/summary", protect, getWalletSummary);
 
 router.get("/ledger", protect, getLedger);
+router.get("/statement", protect, downloadStatement);
 
 // TRANSACTIONS
 router.post("/payin", protect, payIn);

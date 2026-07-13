@@ -50,6 +50,7 @@ const {
 const {
   getDashboard,
   getUsers,
+  createUser,
   getUserById,
   updateUser,
   deleteUser,
@@ -135,7 +136,7 @@ router.get(
 // USERS
 // =========================
 router.get("/users", allowPermissions(PERMISSIONS.USERS.READ), getUsers);
-
+router.post("/users", allowPermissions(PERMISSIONS.USERS.CREATE), createUser);
 router.get("/users/:id", allowPermissions("users.read"), getUserById);
 router.put("/users/:id", allowPermissions("users.update"), updateUser);
 router.delete("/users/:id", allowPermissions("users.delete"), deleteUser);

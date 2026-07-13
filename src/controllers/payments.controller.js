@@ -14,6 +14,7 @@ const {
 const { requestRefund } = require("../services/refund.service");
 const LedgerEntry = require("../models/LedgerEntry");
 const Wallet = require("../models/Wallet");
+const ExcelJS = require("exceljs");
 
 // PAYMENT METHODS (STATIC)
 
@@ -98,7 +99,16 @@ const getLedger = async (req, res, next) => {
     const limit = Math.min(Number(req.query.limit) || 20, 100);
     const skip = (page - 1) * limit;
 
-    const { type, search } = req.query;
+    const {
+      type,
+      category,
+      status,
+      search,
+      fromDate,
+      toDate,
+      sortBy = "createdAt",
+      sortOrder = "desc",
+    } = req.query;
 
     const filter = {
       wallet: wallet._id,
@@ -106,6 +116,14 @@ const getLedger = async (req, res, next) => {
 
     if (type && type !== "ALL") {
       filter.type = type;
+    }
+
+    if (category && category !== "ALL") {
+      filter.category = category;
+    }
+
+    if (status && status !== "ALL") {
+      filter.status = status;
     }
 
     if (search) {
@@ -122,13 +140,52 @@ const getLedger = async (req, res, next) => {
             $options: "i",
           },
         },
+        {
+          description: {
+            $regex: search,
+            $options: "i",
+          },
+        },
       ];
+    }
+
+    if (fromDate || toDate) {
+      filter.createdAt = {};
+
+      if (fromDate) {
+        filter.createdAt.$gte = new Date(fromDate);
+      }
+
+      if (toDate) {
+        const end = new Date(toDate);
+        end.setHours(23, 59, 59, 999);
+
+        filter.createdAt.$lte = end;
+      }
     }
 
     const total = await LedgerEntry.countDocuments(filter);
 
+    const allowedSortFields = [
+      "createdAt",
+      "amount",
+      "status",
+      "reason",
+      "balanceBefore",
+      "balanceAfter",
+    ];
+    const finalSortBy = allowedSortFields.includes(sortBy)
+      ? sortBy
+      : "createdAt";
+
     const items = await LedgerEntry.find(filter)
-      .sort({ createdAt: -1 })
+      .populate({
+        path: "order",
+        select: "borzoOrderId status deliveryType pickup drop pricing.amount",
+      })
+      .sort({
+        [finalSortBy]: sortOrder === "asc" ? 1 : -1,
+      })
       .skip(skip)
       .limit(limit);
 
@@ -193,6 +250,123 @@ const getWalletSummary = async (req, res, next) => {
       },
       "Wallet summary fetched",
     );
+  } catch (err) {
+    next(err);
+  }
+};
+
+const downloadStatement = async (req, res, next) => {
+  try {
+    const wallet = await Wallet.findOne({
+      user: req.user._id,
+    });
+
+    if (!wallet) {
+      const err = new Error("Wallet not found");
+      err.statusCode = 404;
+      throw err;
+    }
+
+    const entries = await LedgerEntry.find({
+      wallet: wallet._id,
+    })
+      .populate({
+        path: "order",
+        select: "borzoOrderId",
+      })
+      .sort({
+        createdAt: -1,
+      });
+
+    const workbook = new ExcelJS.Workbook();
+
+    const sheet = workbook.addWorksheet("Wallet Statement");
+
+    sheet.columns = [
+      {
+        header: "Date",
+        key: "date",
+        width: 24,
+      },
+      {
+        header: "Type",
+        key: "type",
+        width: 14,
+      },
+      {
+        header: "Reason",
+        key: "reason",
+        width: 28,
+      },
+      {
+        header: "Category",
+        key: "category",
+        width: 18,
+      },
+      {
+        header: "Reference",
+        key: "reference",
+        width: 28,
+      },
+      {
+        header: "Order",
+        key: "order",
+        width: 20,
+      },
+      {
+        header: "Status",
+        key: "status",
+        width: 18,
+      },
+      {
+        header: "Credit",
+        key: "credit",
+        width: 16,
+      },
+      {
+        header: "Debit",
+        key: "debit",
+        width: 16,
+      },
+      {
+        header: "Balance After",
+        key: "balance",
+        width: 18,
+      },
+    ];
+
+    sheet.getRow(1).font = {
+      bold: true,
+    };
+
+    entries.forEach((entry) => {
+      sheet.addRow({
+        date: entry.createdAt,
+        type: entry.type,
+        reason: entry.reason,
+        category: entry.category,
+        reference: entry.reference || "",
+        order: entry.order?.borzoOrderId || "",
+        status: entry.status,
+        credit: entry.type === "CREDIT" ? entry.amount : "",
+        debit: entry.type === "DEBIT" ? entry.amount : "",
+        balance: entry.balanceAfter,
+      });
+    });
+
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    );
+
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename=wallet-statement-${Date.now()}.xlsx`,
+    );
+
+    await workbook.xlsx.write(res);
+
+    res.end();
   } catch (err) {
     next(err);
   }
@@ -273,6 +447,7 @@ module.exports = {
   getWalletBalance,
   getWalletSummary,
   getLedger,
+  downloadStatement,
 
   createPaymentIntentAndGatewayOrder,
 
