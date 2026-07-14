@@ -3,7 +3,7 @@ const env = require("../config/env");
 
 module.exports = function verifyBorzoSignature(req) {
   const signature = req.get("X-DV-Signature");
-  const secret = env.BORZO.CALLBACK_SECRET;
+  const secret = env.BORZO.BORZO_CALLBACK_SECRET;
   const body = req.rawBody;
 
   if (!signature || !secret || !body) {
