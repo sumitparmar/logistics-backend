@@ -52,10 +52,6 @@ const downloadInvoice = async (req, res, next) => {
 
     const order = await Order.findById(orderId);
 
-    console.log("================ ORDER DATA ================");
-    console.log(JSON.stringify(order, null, 2));
-    console.log("===========================================");
-
     const user = await User.findById(req.user._id);
 
     const pdfBuffer = await generateInvoicePdf(invoice, order, user);

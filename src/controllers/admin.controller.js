@@ -780,10 +780,6 @@ const updateOrderStatus = async (req, res) => {
     const { status } = req.body;
     const orderId = req.params.id;
 
-    console.log("ADMIN STATUS UPDATE HIT");
-    console.log("ORDER:", orderId);
-    console.log("NEW STATUS:", status);
-
     const order = await Order.findById(orderId);
 
     if (!order) {
@@ -816,11 +812,6 @@ const updateOrderStatus = async (req, res) => {
 
     if (isNewlyDelivered) {
       try {
-        console.log("=================================");
-        console.log("INVOICE FLOW STARTED");
-        console.log("ORDER ID:", savedOrder._id);
-        console.log("USER ID:", savedOrder.user);
-
         if (
           savedOrder.cod?.enabled === true &&
           savedOrder.codSettled !== true
@@ -841,22 +832,11 @@ const updateOrderStatus = async (req, res) => {
 
         const invoice = await createInvoiceForOrder(savedOrder);
 
-        console.log("INVOICE CREATED:", invoice.invoiceNumber);
-
         const user = await User.findById(savedOrder.user);
 
-        console.log("USER FOUND:", user?.email);
-
         if (!user?.email) {
-          console.log("NO EMAIL FOUND FOR USER");
         } else {
-          console.log("GENERATING PDF...");
-
           const pdfBuffer = await generateInvoicePdf(invoice, savedOrder, user);
-
-          console.log("PDF GENERATED");
-
-          console.log("SENDING EMAIL...");
 
           await sendEmail(
             user.email,
@@ -874,12 +854,7 @@ const updateOrderStatus = async (req, res) => {
               },
             ],
           );
-
-          console.log("INVOICE EMAIL SENT TO:", user.email);
         }
-
-        console.log("INVOICE FLOW COMPLETED");
-        console.log("=================================");
       } catch (error) {
         console.error("INVOICE FLOW ERROR:", error);
       }

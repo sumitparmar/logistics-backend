@@ -5,10 +5,6 @@ const formatCurrency = (amount = 0) => `₹ ${Number(amount).toFixed(2)}`;
 
 const generateInvoicePdf = (invoice, order, user) => {
   return new Promise((resolve, reject) => {
-    console.log("========== ORDER OBJECT ==========");
-    console.log(JSON.stringify(order, null, 2));
-    console.log("==================================");
-
     try {
       const doc = new PDFDocument({
         size: "A4",

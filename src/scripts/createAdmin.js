@@ -46,10 +46,14 @@ const {
           isDeleted: false,
         },
       },
-      { new: true, upsert: true, runValidators: true, setDefaultsOnInsert: true },
+      {
+        new: true,
+        upsert: true,
+        runValidators: true,
+        setDefaultsOnInsert: true,
+      },
     );
 
-    console.log(`Admin ready: ${admin.email || admin.phone}`);
     process.exit(0);
   } catch (err) {
     console.error(err.message);

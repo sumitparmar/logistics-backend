@@ -334,9 +334,7 @@ const createOrderService = async (data) => {
   const vehicleTypeFromProvider =
     createResponse.order.vehicle_type_id || validVehicle.id;
   const mappedStatus = mapBorzoStatus(providerStatus);
-  console.log("BORZO STATUS:", providerStatus);
-  console.log("MAPPED STATUS:", mappedStatus);
-  console.log("FINAL STATUS:", transitionStatus(null, mappedStatus));
+
   const order = new Order({
     pricingSnapshot: snapshot,
     borzoOrderId: String(createResponse.order.order_id),

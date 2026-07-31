@@ -38,10 +38,6 @@ const breakerOptions = {
 
 const breaker = new CircuitBreaker(
   async (config) => {
-    console.log("\n========== AXIOS REQUEST ==========");
-    console.log(JSON.stringify(config.data, null, 2));
-    console.log("===================================\n");
-
     const response = await axiosClient(config);
     return response;
   },
@@ -94,11 +90,6 @@ const client = async (config) => {
 client.get = (url, options = {}) => client({ method: "get", url, ...options });
 
 client.post = (url, data, options = {}) => {
-  console.log("\n========== RAW BORZO POST ==========");
-  console.log(url);
-  console.log(JSON.stringify(data, null, 2));
-  console.log("====================================\n");
-
   return client({
     method: "post",
     url,
