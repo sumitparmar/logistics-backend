@@ -36,4 +36,22 @@ function applyAdminPricing({ basePrice, config, vehicleType }) {
   return Number(price.toFixed(2));
 }
 
-module.exports = { applyAdminPricing };
+function calculateAdminPricing({ basePrice, config, vehicleType }) {
+  const subtotal = applyAdminPricing({ basePrice, config, vehicleType });
+  const gstPercent = Number(config?.tax?.gstPercent ?? 18);
+  const gstEnabled = config?.tax?.gstEnabled !== false;
+  const gstAmount = gstEnabled
+    ? Number(((subtotal * gstPercent) / 100).toFixed(2))
+    : 0;
+  const finalAmount = Number((subtotal + gstAmount).toFixed(2));
+
+  return {
+    subtotal,
+    gstEnabled,
+    gstPercent: gstEnabled ? gstPercent : 0,
+    gstAmount,
+    finalAmount,
+  };
+}
+
+module.exports = { applyAdminPricing, calculateAdminPricing };

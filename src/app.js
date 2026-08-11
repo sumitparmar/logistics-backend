@@ -32,6 +32,7 @@ const app = express(); // FIRST create app
 const analyticsRoutes = require("./routes/analytics.routes");
 const invoiceRoutes = require("./routes/invoice.routes");
 const addressRoutes = require("./routes/address.routes");
+const driverOnboardingRoutes = require("./routes/driverOnboarding.routes");
 
 const customerNotificationsRoutes = require("./routes/customerNotifications.routes");
 // MUST BE FIRST
@@ -101,6 +102,7 @@ app.use("/api/admin", adminRoutes);
 app.use("/api/payment-webhooks", paymentWebhookRoutes);
 app.use("/api/invoices", invoiceRoutes);
 app.use("/api/addresses", protect, addressRoutes);
+app.use("/api/driver-onboarding", driverOnboardingRoutes);
 app.use("/api/meta", require("./routes/meta.routes"));
 // Health
 app.get("/", (req, res) => {

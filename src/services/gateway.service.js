@@ -4,7 +4,10 @@ const createGatewayOrder = async ({ amount, currency }) => {
   if (!Number.isFinite(Number(amount)) || Number(amount) <= 0) {
     throw new Error("Invalid payment amount");
   }
-  if (process.env.PAYMENT_GATEWAY_MODE === "MOCK") {
+  if (
+    process.env.PAYMENT_GATEWAY_MODE === "MOCK" ||
+    (process.env.NODE_ENV !== "production" && !razorpay)
+  ) {
     return {
       id: `mock_order_${Date.now()}`,
       amount: Math.round(Number(amount) * 100),

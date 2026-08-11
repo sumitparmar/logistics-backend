@@ -1,4 +1,5 @@
 const AdminPricing = require("../models/adminPricing.model");
+const { emitPricingUpdate } = require("../services/realtime.service");
 
 exports.getAdminPricing = async (req, res) => {
   try {
@@ -26,6 +27,7 @@ exports.updateAdminPricing = async (req, res) => {
     }
 
     await config.save();
+    emitPricingUpdate(config);
 
     res.json(config);
   } catch (err) {

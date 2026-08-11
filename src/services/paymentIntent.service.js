@@ -91,9 +91,52 @@ const markFailed = async ({ intentId, metadata }) => {
   );
 };
 
+const getSuccessfulIntentForUser = async ({ intentId, userId, amount }) => {
+  if (!intentId) {
+    const err = new Error("Payment intent is required for advance checkout");
+    err.statusCode = 402;
+    throw err;
+  }
+
+  const intent = await PaymentIntent.findOne({
+    _id: intentId,
+    user: userId,
+    status: "SUCCESS",
+  });
+
+  if (!intent) {
+    const err = new Error("Advance payment is not completed");
+    err.statusCode = 402;
+    throw err;
+  }
+
+  const expectedAmount = Number(Number(amount || 0).toFixed(2));
+  if (expectedAmount > 0 && Number(intent.amount) !== expectedAmount) {
+    const err = new Error("Payment amount does not match order amount");
+    err.statusCode = 409;
+    throw err;
+  }
+
+  return intent;
+};
+
+const attachOrderToIntent = async ({ intentId, orderId }) => {
+  return PaymentIntent.findByIdAndUpdate(
+    intentId,
+    {
+      $set: {
+        order: orderId,
+      },
+    },
+    { new: true },
+  );
+};
+
 module.exports = {
   createPaymentIntent,
   markProcessing,
   markSuccess,
   markFailed,
+  getSuccessfulIntentForUser,
+  attachOrderToIntent,
 };

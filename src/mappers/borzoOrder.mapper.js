@@ -85,7 +85,7 @@ function applyPaymentMethod(payload, payment = {}) {
 }
 
 function applyCashPaymentPoint(payload, payment = {}) {
-  const method = String(payment.method || "CASH").toUpperCase();
+  const method = String(payment.method || "BALANCE").toUpperCase();
 
   if (method && method !== "CASH") {
     return;

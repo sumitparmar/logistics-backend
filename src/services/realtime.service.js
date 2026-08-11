@@ -28,6 +28,19 @@ const emitOrderUpdate = (userId, order, options = {}) => {
   }
 };
 
+const emitPricingUpdate = (pricing) => {
+  try {
+    const io = getIO();
+    io.to("admin").emit("admin-pricing-update", pricing);
+    io.emit("pricing-update", {
+      updatedAt: new Date(),
+    });
+  } catch (err) {
+    console.error("Socket emit failed:", err.message);
+  }
+};
+
 module.exports = {
   emitOrderUpdate,
+  emitPricingUpdate,
 };

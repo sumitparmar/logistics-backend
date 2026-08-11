@@ -8,7 +8,7 @@ const {
 const { mapBorzoStatus } = require("../utils/statusMapper");
 const mapDeliveryStatus = require("../utils/deliveryStatusMapper");
 const AdminPricing = require("../models/adminPricing.model");
-const { applyAdminPricing } = require("./adminPricing.service");
+const { calculateAdminPricing } = require("./adminPricing.service");
 const LedgerEntry = require("../models/LedgerEntry");
 const {
   mapCreateOrderPayload,
@@ -28,6 +28,10 @@ const {
 const mongoose = require("mongoose");
 
 const { debitWallet, creditWallet, getWallet } = require("./wallet.service");
+const {
+  getSuccessfulIntentForUser,
+  attachOrderToIntent,
+} = require("./paymentIntent.service");
 const toMoneyNumber = (value) => Number(Number(value || 0).toFixed(2));
 
 // CREATE ORDER
@@ -107,7 +111,7 @@ const createOrderService = async (data) => {
 
   // Payment
   data.payment = data.payment || {
-    method: "CASH",
+    method: "BALANCE",
     feePayer: "DROP",
   };
 
@@ -172,18 +176,14 @@ const createOrderService = async (data) => {
       vehicleOverrides: [],
     };
   }
-  // Step 1: apply admin pricing on base
-  let adjustedAmount = baseAmount;
+  const pricingTotals = calculateAdminPricing({
+    basePrice: baseAmount,
+    config: pricingConfig,
+    vehicleType: String(data.vehicleTypeId),
+  });
 
-  if (pricingConfig && baseAmount > 0) {
-    adjustedAmount = applyAdminPricing({
-      basePrice: baseAmount,
-      config: pricingConfig,
-      vehicleType: String(data.vehicleTypeId),
-    });
-  }
-
-  const finalAmount = Number(adjustedAmount.toFixed(2));
+  const adjustedAmount = pricingTotals.subtotal;
+  const finalAmount = pricingTotals.finalAmount;
 
   const snapshot = {
     marginAmount: Number(
@@ -222,6 +222,9 @@ const createOrderService = async (data) => {
     insuranceFeeAmount: insuranceCharge,
 
     codFee: Number(priceResponse?.order?.cod_fee_amount || 0),
+    gstEnabled: pricingTotals.gstEnabled,
+    gstPercent: pricingTotals.gstPercent,
+    gstAmount: pricingTotals.gstAmount,
 
     finalPrice: finalAmount,
   };
@@ -246,6 +249,16 @@ const createOrderService = async (data) => {
         return cleanStop;
       });
     }
+  }
+
+  let paidIntent = null;
+
+  if (data.payment?.method === "BALANCE") {
+    paidIntent = await getSuccessfulIntentForUser({
+      intentId: data.payment.intentId,
+      userId: data.user,
+      amount: finalAmount,
+    });
   }
 
   // Wallet validation
@@ -347,7 +360,12 @@ const createOrderService = async (data) => {
     deliveryType: data.deliveryType,
     vehicleTypeId: data.vehicleTypeId,
     package: data.package,
-    payment: data.payment,
+    payment: {
+      ...data.payment,
+      status: paidIntent ? "PAID" : "PENDING",
+      intent: paidIntent?._id || null,
+      gateway: paidIntent?.gateway || null,
+    },
     user: data.user,
 
     vehicle: {
@@ -357,6 +375,9 @@ const createOrderService = async (data) => {
       baseAmount,
       adjustedAmount,
       insurance: insuranceCharge,
+      taxableAmount: adjustedAmount,
+      gstRate: pricingTotals.gstPercent,
+      gstAmount: pricingTotals.gstAmount,
       amount: finalAmount,
       currency: process.env.CURRENCY,
       calculatedAt: new Date(),
@@ -380,6 +401,13 @@ const createOrderService = async (data) => {
   });
 
   const savedOrder = await order.save();
+
+  if (paidIntent) {
+    await attachOrderToIntent({
+      intentId: paidIntent._id,
+      orderId: savedOrder._id,
+    });
+  }
 
   if (data.payment?.method === "WALLET") {
     await LedgerEntry.findOneAndUpdate(
@@ -906,25 +934,25 @@ const calculateOrderService = async (data) => {
       vehicleOverrides: [],
     };
   }
-  // Apply admin pricing
-  let adjustedAmount = baseAmount;
+  const pricingTotals = calculateAdminPricing({
+    basePrice: baseAmount,
+    config: pricingConfig,
+    vehicleType: String(data.vehicleTypeId || data.vehicleType || ""),
+  });
 
-  if (pricingConfig && baseAmount > 0) {
-    adjustedAmount = applyAdminPricing({
-      basePrice: baseAmount,
-      config: pricingConfig,
-      vehicleType: String(data.vehicleTypeId || data.vehicleType || ""),
-    });
-  }
-
-  const amount = Number(adjustedAmount.toFixed(2));
+  const amount = pricingTotals.finalAmount;
 
   return {
     amount,
     currency: process.env.CURRENCY,
     providerAmount: baseAmount,
     insurance: insuranceCharge,
-    deliveryFee: Number(Math.max(amount - insuranceCharge, 0).toFixed(2)),
+    taxableAmount: pricingTotals.subtotal,
+    gstRate: pricingTotals.gstPercent,
+    gstAmount: pricingTotals.gstAmount,
+    deliveryFee: Number(
+      Math.max(pricingTotals.subtotal - insuranceCharge, 0).toFixed(2),
+    ),
     breakdown: {
       deliveryFeeAmount: toMoneyNumber(response.order.delivery_fee_amount),
       insuranceAmount: toMoneyNumber(response.order.insurance_amount),
@@ -935,6 +963,10 @@ const calculateOrderService = async (data) => {
       promoDiscountAmount: toMoneyNumber(
         response.order.promo_code_discount_amount,
       ),
+      taxableAmount: pricingTotals.subtotal,
+      gstRate: pricingTotals.gstPercent,
+      gstAmount: pricingTotals.gstAmount,
+      totalPayable: amount,
     },
   };
 };
@@ -1063,22 +1095,22 @@ const editOrderService = async (id, userId, data) => {
         };
       }
 
-      let adjustedAmount = baseAmount;
+      const pricingTotals = calculateAdminPricing({
+        basePrice: baseAmount,
+        config: pricingConfig,
+        vehicleType: String(order.vehicleTypeId),
+      });
 
-      if (pricingConfig && baseAmount > 0) {
-        adjustedAmount = applyAdminPricing({
-          basePrice: baseAmount,
-          config: pricingConfig,
-          vehicleType: String(order.vehicleTypeId),
-        });
-      }
-
-      const finalAmount = Number(adjustedAmount.toFixed(2));
+      const adjustedAmount = pricingTotals.subtotal;
+      const finalAmount = pricingTotals.finalAmount;
 
       order.pricing = {
         baseAmount,
         adjustedAmount,
         insurance: Number(priceResponse.order.insurance_fee_amount || 0),
+        taxableAmount: adjustedAmount,
+        gstRate: pricingTotals.gstPercent,
+        gstAmount: pricingTotals.gstAmount,
         amount: finalAmount,
         currency: process.env.CURRENCY,
         calculatedAt: new Date(),
@@ -1120,6 +1152,9 @@ const editOrderService = async (id, userId, data) => {
         ),
 
         codFee: Number(priceResponse.order.cod_fee_amount || 0),
+        gstEnabled: pricingTotals.gstEnabled,
+        gstPercent: pricingTotals.gstPercent,
+        gstAmount: pricingTotals.gstAmount,
 
         finalPrice: finalAmount,
       };

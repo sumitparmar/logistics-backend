@@ -84,6 +84,17 @@ const orderSchema = new mongoose.Schema(
         enum: ["CASH", "BANK_CARD", "CARD", "WALLET", "BALANCE"],
         default: "CASH",
       },
+      status: {
+        type: String,
+        enum: ["PENDING", "PAID", "FAILED", "REFUNDED"],
+        default: "PENDING",
+      },
+      intent: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "PaymentIntent",
+        default: null,
+      },
+      gateway: String,
       feePayer: {
         type: String,
         enum: ["PICKUP", "DROP"],
@@ -124,6 +135,9 @@ const orderSchema = new mongoose.Schema(
       baseAmount: { type: Number },
       adjustedAmount: { type: Number },
       insurance: { type: Number, default: 0 },
+      taxableAmount: { type: Number, default: 0 },
+      gstRate: { type: Number, default: 0 },
+      gstAmount: { type: Number, default: 0 },
       amount: { type: Number, required: true },
       currency: { type: String, required: true },
       calculatedAt: { type: Date },
@@ -230,6 +244,9 @@ const orderSchema = new mongoose.Schema(
       insuranceFeeAmount: Number,
 
       codFee: Number,
+      gstEnabled: Boolean,
+      gstPercent: Number,
+      gstAmount: Number,
 
       finalPrice: Number,
     },

@@ -3,6 +3,7 @@ const { sendSuccess } = require("../utils/response");
 const {
   createPaymentIntent,
   markProcessing,
+  markSuccess,
 } = require("../services/paymentIntent.service");
 const { createGatewayOrder } = require("../services/gateway.service");
 const PaymentIntent = require("../models/PaymentIntent");
@@ -410,6 +411,51 @@ const createPaymentIntentAndGatewayOrder = async (req, res, next) => {
   }
 };
 
+const confirmMockPaymentIntent = async (req, res, next) => {
+  try {
+    if (
+      process.env.NODE_ENV === "production" &&
+      process.env.PAYMENT_GATEWAY_MODE !== "MOCK"
+    ) {
+      const err = new Error("Mock payment confirmation is disabled");
+      err.statusCode = 403;
+      throw err;
+    }
+
+    const intent = await PaymentIntent.findOne({
+      _id: req.params.id,
+      user: req.user._id,
+      status: "PROCESSING",
+    });
+
+    if (!intent) {
+      const err = new Error("Payment intent not found or not processable");
+      err.statusCode = 404;
+      throw err;
+    }
+
+    const updated = await markSuccess({
+      intentId: intent._id,
+      gatewayPaymentId: `mock_payment_${Date.now()}`,
+      metadata: {
+        gateway: "MOCK",
+        confirmedBy: "system",
+      },
+    });
+
+    return sendSuccess(
+      res,
+      {
+        intentId: updated._id,
+        status: updated.status,
+      },
+      "Mock payment confirmed",
+    );
+  } catch (err) {
+    next(err);
+  }
+};
+
 const refundPayment = async (req, res, next) => {
   try {
     const { intentId, reason } = req.body;
@@ -450,6 +496,7 @@ module.exports = {
   downloadStatement,
 
   createPaymentIntentAndGatewayOrder,
+  confirmMockPaymentIntent,
 
   refundPayment,
 };

@@ -43,6 +43,11 @@ const {
 } = require("../controllers/adminSupport.controller");
 
 const {
+  listApplications: listDriverOnboardingApplications,
+  updateApplicationStatus: updateDriverOnboardingStatus,
+} = require("../controllers/driverOnboarding.controller");
+
+const {
   getAdminPricing,
   updateAdminPricing,
 } = require("../controllers/adminPricing.controller");
@@ -192,6 +197,16 @@ router.put(
 // COURIERS
 // =========================
 router.get("/couriers", allowPermissions("drivers.read"), getCouriers);
+router.get(
+  "/driver-onboarding",
+  allowPermissions("drivers.read"),
+  listDriverOnboardingApplications,
+);
+router.put(
+  "/driver-onboarding/:id/status",
+  allowPermissions("drivers.update"),
+  updateDriverOnboardingStatus,
+);
 
 // =========================
 // PRICING

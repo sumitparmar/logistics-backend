@@ -122,10 +122,11 @@ const createOrderSchema = Joi.object({
   payment: Joi.object({
     method: Joi.string()
       .valid("CASH", "BANK_CARD", "CARD", "WALLET", "BALANCE")
-      .default("CASH"),
+      .default("BALANCE"),
     feePayer: Joi.string().valid("PICKUP", "DROP").default("DROP"),
     bankCardId: Joi.number().optional(),
     bank_card_id: Joi.number().optional(),
+    intentId: Joi.string().optional(),
   }).optional(),
 
   // existing

@@ -32,6 +32,11 @@ const adminPricingSchema = new mongoose.Schema(
       insurancePercent: { type: Number, default: 0 },
       codFee: { type: Number, default: 0 },
     },
+
+    tax: {
+      gstEnabled: { type: Boolean, default: true },
+      gstPercent: { type: Number, default: 18 },
+    },
   },
   { timestamps: true },
 );
