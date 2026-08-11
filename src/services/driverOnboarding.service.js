@@ -1,6 +1,29 @@
 const DriverOnboarding = require("../models/DriverOnboarding");
+const SystemSettings = require("../models/SystemSettings");
 const { getVehicleTypes } = require("./providerCatalog.service");
 const { getIO } = require("../config/socket");
+
+const DEFAULT_DRIVER_ONBOARDING = {
+  serviceAreaCountry: "in",
+  requireGooglePlaceSelection: false,
+  availabilityOptions: [
+    { value: "FLEXIBLE", label: "Flexible" },
+    { value: "FULL_TIME", label: "Full time" },
+    { value: "PART_TIME", label: "Part time" },
+    { value: "WEEKENDS", label: "Weekends" },
+  ],
+  requiredConsents: [
+    {
+      key: "termsAccepted",
+      label: "I confirm that the information provided is accurate.",
+    },
+    {
+      key: "backgroundCheckAccepted",
+      label:
+        "I consent to document and background verification for onboarding.",
+    },
+  ],
+};
 
 const emitDriverOnboardingUpdate = (application) => {
   try {
@@ -21,6 +44,12 @@ const sanitizePayload = async (payload) => {
     throw err;
   }
 
+  const settings = await getDriverOnboardingSettings();
+  const preferredAreas = normalizePreferredAreas(
+    payload?.servicePreferences?.preferredAreas || [],
+    settings,
+  );
+
   return {
     personal: payload.personal,
     vehicle: {
@@ -30,13 +59,91 @@ const sanitizePayload = async (payload) => {
     },
     documents: payload.documents || {},
     payout: payload.payout || {},
-    servicePreferences: payload.servicePreferences || {},
+    servicePreferences: {
+      ...(payload.servicePreferences || {}),
+      preferredAreas,
+    },
     consent: payload.consent || {},
   };
 };
 
+const getDriverOnboardingSettings = async () => {
+  let settings = await SystemSettings.findOne();
+
+  if (!settings) {
+    settings = await SystemSettings.create({
+      driverOnboarding: DEFAULT_DRIVER_ONBOARDING,
+    });
+  }
+
+  const current = settings.driverOnboarding || {};
+  const needsSeed =
+    !current.availabilityOptions?.length || !current.requiredConsents?.length;
+
+  if (needsSeed) {
+    settings.driverOnboarding = {
+      ...DEFAULT_DRIVER_ONBOARDING,
+      ...(current.toObject ? current.toObject() : current),
+      availabilityOptions: current.availabilityOptions?.length
+        ? current.availabilityOptions
+        : DEFAULT_DRIVER_ONBOARDING.availabilityOptions,
+      requiredConsents: current.requiredConsents?.length
+        ? current.requiredConsents
+        : DEFAULT_DRIVER_ONBOARDING.requiredConsents,
+    };
+    await settings.save();
+  }
+
+  return settings.driverOnboarding || DEFAULT_DRIVER_ONBOARDING;
+};
+
+const normalizePreferredAreas = (areas, settings) => {
+  return (Array.isArray(areas) ? areas : [])
+    .map((area) => {
+      if (typeof area === "string") {
+        return {
+          address: area.trim(),
+          source: "MANUAL",
+        };
+      }
+
+      return {
+        address: String(area?.address || "").trim(),
+        placeId: area?.placeId || null,
+        city: area?.city || null,
+        lat:
+          area?.lat !== undefined && area?.lat !== null
+            ? Number(area.lat)
+            : null,
+        lng:
+          area?.lng !== undefined && area?.lng !== null
+            ? Number(area.lng)
+            : null,
+        source: area?.placeId ? "GOOGLE_PLACES" : "MANUAL",
+      };
+    })
+    .filter((area) => {
+      if (!area.address) return false;
+      if (settings.requireGooglePlaceSelection && !area.placeId) return false;
+      return true;
+    });
+};
+
 const getMyDriverOnboarding = async (userId) => {
   return DriverOnboarding.findOne({ user: userId });
+};
+
+const getDriverOnboardingOptions = async () => {
+  const vehicles = await getVehicleTypes();
+  const settings = await getDriverOnboardingSettings();
+
+  return {
+    vehicles,
+    availabilityOptions: settings.availabilityOptions,
+    requiredConsents: settings.requiredConsents,
+    serviceAreaCountry: settings.serviceAreaCountry || "in",
+    requireGooglePlaceSelection: Boolean(settings.requireGooglePlaceSelection),
+  };
 };
 
 const saveMyDriverOnboarding = async ({ userId, payload, submit = false }) => {
@@ -146,6 +253,7 @@ const updateDriverOnboardingStatus = async ({ id, status, remarks, adminId }) =>
 
 module.exports = {
   getMyDriverOnboarding,
+  getDriverOnboardingOptions,
   saveMyDriverOnboarding,
   listDriverOnboarding,
   updateDriverOnboardingStatus,

@@ -1,10 +1,20 @@
 const { sendSuccess } = require("../utils/response");
 const {
   getMyDriverOnboarding,
+  getDriverOnboardingOptions,
   saveMyDriverOnboarding,
   listDriverOnboarding,
   updateDriverOnboardingStatus,
 } = require("../services/driverOnboarding.service");
+
+const getOptions = async (req, res, next) => {
+  try {
+    const options = await getDriverOnboardingOptions();
+    return sendSuccess(res, options, "Driver onboarding options fetched");
+  } catch (err) {
+    next(err);
+  }
+};
 
 const getMine = async (req, res, next) => {
   try {
@@ -78,6 +88,7 @@ const updateApplicationStatus = async (req, res, next) => {
 
 module.exports = {
   getMine,
+  getOptions,
   saveMine,
   submitMine,
   listApplications,

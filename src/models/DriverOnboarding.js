@@ -44,7 +44,20 @@ const driverOnboardingSchema = new mongoose.Schema(
       ifsc: { type: String, uppercase: true, trim: true },
     },
     servicePreferences: {
-      preferredAreas: [{ type: String, trim: true }],
+      preferredAreas: [
+        {
+          address: { type: String, trim: true, required: true },
+          placeId: { type: String, trim: true },
+          city: { type: String, trim: true },
+          lat: Number,
+          lng: Number,
+          source: {
+            type: String,
+            enum: ["GOOGLE_PLACES", "MANUAL"],
+            default: "MANUAL",
+          },
+        },
+      ],
       availability: {
         type: String,
         enum: ["FULL_TIME", "PART_TIME", "WEEKENDS", "FLEXIBLE"],

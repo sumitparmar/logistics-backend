@@ -61,6 +61,39 @@ const systemSettingsSchema = new mongoose.Schema(
       max: 1440,
     },
 
+    driverOnboarding: {
+      serviceAreaCountry: {
+        type: String,
+        default: "in",
+        trim: true,
+        lowercase: true,
+      },
+      requireGooglePlaceSelection: {
+        type: Boolean,
+        default: false,
+      },
+      availabilityOptions: [
+        {
+          value: {
+            type: String,
+            enum: ["FULL_TIME", "PART_TIME", "WEEKENDS", "FLEXIBLE"],
+            required: true,
+          },
+          label: { type: String, trim: true, required: true },
+        },
+      ],
+      requiredConsents: [
+        {
+          key: {
+            type: String,
+            enum: ["termsAccepted", "backgroundCheckAccepted"],
+            required: true,
+          },
+          label: { type: String, trim: true, required: true },
+        },
+      ],
+    },
+
     updatedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
