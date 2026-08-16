@@ -30,8 +30,20 @@ const orderLimiter = rateLimit({
   },
 });
 
+const invoiceResendLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 3,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    message: "Too many invoice email requests. Try again later.",
+  },
+});
+
 module.exports = {
   otpLimiter,
   authLimiter,
   orderLimiter,
+  invoiceResendLimiter,
 };

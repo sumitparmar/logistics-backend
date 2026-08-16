@@ -5,7 +5,7 @@ const { transitionStatus } = require("../engines/status.engine");
 const { mapBorzoStatus } = require("../utils/statusMapper");
 const mapDeliveryStatus = require("../utils/deliveryStatusMapper");
 const { creditWallet } = require("../services/wallet.service");
-const { createInvoiceForOrder } = require("../services/invoice.service");
+const { processDeliveredOrder } = require("../services/invoice.service");
 const {
   notifyOrderDelivered,
 } = require("../services/deliveryNotification.service");
@@ -64,13 +64,14 @@ const startOrderSyncJob = () => {
           if (
             nextStatus === "DELIVERED" &&
             order.cod?.enabled === true &&
-            order.codSettled === false
+            Number(order.cod?.amount || 0) > 0 &&
+            order.codSettled !== true
           ) {
             await creditWallet({
               userId: order.user,
               amount: order.cod.amount,
-              reason: "COD_COLLECTION",
-              reference: order._id.toString(),
+              reason: "COD_SETTLEMENT",
+              reference: order.borzoOrderId,
               metadata: {
                 provider: order.provider,
                 borzoOrderId: order.borzoOrderId,
@@ -84,10 +85,10 @@ const startOrderSyncJob = () => {
 
           if (nextStatus === "DELIVERED") {
             try {
-              await createInvoiceForOrder(savedOrder);
+              await processDeliveredOrder(savedOrder);
               await notifyOrderDelivered(savedOrder);
             } catch (err) {
-              console.error("INVOICE CREATE ERROR:", err.message);
+              console.error("DELIVERED ORDER PROCESSING ERROR:", err.message);
             }
           }
 

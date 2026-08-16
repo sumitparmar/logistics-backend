@@ -6,6 +6,7 @@ const createPaymentIntent = async ({
   amount,
   currency = "INR",
   paymentMethod,
+  purpose = "ORDER_PAYMENT",
 }) => {
   if (!Number.isFinite(Number(amount)) || Number(amount) <= 0) {
     const err = new Error("Invalid amount");
@@ -21,6 +22,7 @@ const createPaymentIntent = async ({
     gateway: "RAZORPAY",
     status: "CREATED",
     statusHistory: [{ status: "CREATED" }],
+    metadata: { purpose },
   });
 
   return intent;

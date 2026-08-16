@@ -15,6 +15,11 @@ const {
 } = require("../middlewares/role.middleware");
 
 const PERMISSIONS = require("../constants/adminPermissions");
+const {
+  getAdminInvoice,
+  downloadAdminInvoice,
+  resendAdminInvoice,
+} = require("../controllers/adminInvoice.controller");
 
 const { getPricingAnalytics } = require("../controllers/analytics.controller");
 
@@ -201,6 +206,25 @@ router.get(
   "/driver-onboarding",
   allowPermissions("drivers.read"),
   listDriverOnboardingApplications,
+);
+
+// =========================
+// INVOICES
+// =========================
+router.get(
+  "/invoices/:orderId",
+  allowPermissions("orders.read"),
+  getAdminInvoice,
+);
+router.get(
+  "/invoices/:orderId/download",
+  allowPermissions("orders.read"),
+  downloadAdminInvoice,
+);
+router.post(
+  "/invoices/:orderId/email",
+  allowPermissions("orders.update"),
+  resendAdminInvoice,
 );
 router.put(
   "/driver-onboarding/:id/status",

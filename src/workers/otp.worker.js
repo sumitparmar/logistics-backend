@@ -6,7 +6,12 @@ const sendEmail = require("../utils/sendEmail");
 const CONCURRENCY = 5;
 
 otpQueue.process(CONCURRENCY, async (job) => {
-  const { phone, otp, email } = job.data;
+  const { phone, otp, email, mock } = job.data;
+
+  if (mock) {
+    console.info(`[OTP WORKER] Mock OTP generated for ${phone}`);
+    return true;
+  }
 
   const deliveryResults = [];
 
@@ -14,7 +19,9 @@ otpQueue.process(CONCURRENCY, async (job) => {
     jobId: job.id,
     channel: "otp",
   });
-  deliveryResults.push(smsResult);
+  if (!smsResult?.skipped) {
+    deliveryResults.push(smsResult);
+  }
 
   if (email) {
     try {
@@ -27,7 +34,7 @@ otpQueue.process(CONCURRENCY, async (job) => {
     <p>This OTP is valid for 5 minutes.</p>
   `,
       );
-      deliveryResults.push({ email: true });
+      deliveryResults.push({ email: true, delivered: true });
     } catch (emailError) {
       console.error(
         `[OTP WORKER] Email failed for ${phone}:`,
@@ -37,7 +44,7 @@ otpQueue.process(CONCURRENCY, async (job) => {
     }
   }
 
-  if (deliveryResults.some((result) => !result?.failed)) {
+  if (deliveryResults.some((result) => result?.delivered && !result?.failed)) {
     return true;
   }
 

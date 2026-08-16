@@ -7,38 +7,38 @@ module.exports = {
 
   invalid_parameters: {
     code: "INVALID_PROVIDER_PARAMETERS",
-    message: "Borzo rejected one or more order fields",
+    message: "One or more delivery details could not be accepted",
     status: 400,
   },
 
   different_regions: {
     code: "DIFFERENT_REGIONS",
     message:
-      "Pickup and drop addresses are in different Borzo service regions. Please choose addresses within the same service region.",
+      "Pickup and drop addresses are in different service regions. Please choose addresses within the same service region.",
     status: 400,
   },
 
   invalid_region: {
     code: "INVALID_REGION",
-    message: "One of the selected addresses is outside Borzo service coverage.",
+    message: "One of the selected addresses is outside MoveKart service coverage.",
     status: 400,
   },
 
   address_not_found: {
     code: "ADDRESS_NOT_FOUND",
-    message: "Borzo could not geocode one of the selected addresses.",
+    message: "We could not locate one of the selected addresses.",
     status: 400,
   },
 
   coordinates_out_of_bounds: {
     code: "COORDINATES_OUT_OF_BOUNDS",
-    message: "Selected coordinates are outside Borzo delivery coverage.",
+    message: "Selected coordinates are outside MoveKart delivery coverage.",
     status: 400,
   },
 
   invalid_phone: {
     code: "INVALID_PHONE",
-    message: "Recipient or sender phone number is invalid for Borzo.",
+    message: "Recipient or sender phone number is invalid.",
     status: 400,
   },
 
@@ -62,31 +62,31 @@ module.exports = {
 
   impossible_delivery_fee_calculation: {
     code: "PRICE_CALCULATION_FAILED",
-    message: "Borzo could not calculate a delivery fee for this route.",
+    message: "We could not calculate a delivery fee for this route.",
     status: 400,
   },
 
   requests_limit_exceeded: {
     code: "BORZO_RATE_LIMITED",
-    message: "Borzo API rate limit exceeded. Please try again shortly.",
+    message: "Too many requests were sent. Please try again shortly.",
     status: 429,
   },
 
   required_auth_token: {
     code: "BORZO_AUTH_MISSING",
-    message: "Borzo auth token is missing on the server.",
+    message: "Delivery service configuration is incomplete. Please try again later.",
     status: 502,
   },
 
   invalid_auth_token: {
     code: "BORZO_AUTH_INVALID",
-    message: "Borzo auth token is invalid. Check BORZO_API_TOKEN.",
+    message: "Delivery service authentication failed. Please try again later.",
     status: 502,
   },
 
   service_unavailable: {
     code: "BORZO_SERVICE_UNAVAILABLE",
-    message: "Borzo is temporarily unavailable. Please try again.",
+    message: "Delivery service is temporarily unavailable. Please try again.",
     status: 503,
   },
 

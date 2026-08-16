@@ -182,12 +182,21 @@ const sendOtp = async (phone, fallbackEmail) => {
 
   const user = await User.findOne({ phone });
   const email = user?.email || normalizedEmail || null;
-
-  if (String(process.env.SMS_ENABLED || "false") !== "true" && !email) {
-    throw new Error("Email is required to receive OTP when SMS is unavailable");
-  }
+  const smsEnabled = String(process.env.SMS_ENABLED || "false") === "true";
+  const mockOtpEnabled =
+    String(
+      process.env.OTP_MOCK_ENABLED ||
+        (process.env.NODE_ENV === "production" ? "false" : "true"),
+    ).toLowerCase() === "true";
 
   const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
+  const mockDelivery = !smsEnabled && !email && mockOtpEnabled;
+
+  if (!smsEnabled && !email && !mockDelivery) {
+    throw new Error(
+      "OTP delivery is not configured. Enable SMS, provide an email, or enable OTP_MOCK_ENABLED for testing.",
+    );
+  }
 
   // Store OTP for 5 minutes
   await redis.set(otpKey, generatedOtp, "EX", 300);
@@ -204,6 +213,7 @@ const sendOtp = async (phone, fallbackEmail) => {
       phone,
       otp: generatedOtp,
       email,
+      mock: mockDelivery,
     },
     {
       attempts: 3,
@@ -212,7 +222,15 @@ const sendOtp = async (phone, fallbackEmail) => {
     },
   );
 
-  return { message: "OTP sent successfully" };
+  return {
+    message: "OTP sent successfully",
+    delivery: mockDelivery ? "MOCK" : smsEnabled ? "SMS" : "EMAIL",
+    ...(mockDelivery &&
+    String(process.env.OTP_EXPOSE_MOCK_CODE || "false").toLowerCase() ===
+      "true"
+      ? { mockOtp: generatedOtp }
+      : {}),
+  };
 };
 const verifyEmail = async (token) => {
   const user = await User.findOne({

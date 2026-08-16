@@ -51,6 +51,7 @@ const adminSupportTicketSchema = new mongoose.Schema(
         "REFUND",
         "ACCOUNT",
         "TECHNICAL",
+        "SAFETY",
         "OTHER",
       ],
       default: "OTHER",

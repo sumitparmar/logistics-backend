@@ -54,6 +54,21 @@ const systemSettingsSchema = new mongoose.Schema(
       default: true,
     },
 
+    invoice: {
+      legalName: { type: String, default: "", trim: true },
+      registeredAddress: { type: String, default: "", trim: true },
+      state: { type: String, default: "", trim: true },
+      stateCode: { type: String, default: "", trim: true },
+      gstin: { type: String, default: "", trim: true, uppercase: true },
+      pan: { type: String, default: "", trim: true, uppercase: true },
+      sacCode: { type: String, default: "", trim: true },
+      prefix: { type: String, default: "MK", trim: true, uppercase: true },
+      financialYearStartMonth: { type: Number, default: 4, min: 1, max: 12 },
+      templateVersion: { type: String, default: "1.0", trim: true },
+      supportEmail: { type: String, default: "", trim: true, lowercase: true },
+      supportPhone: { type: String, default: "", trim: true },
+    },
+
     sessionTimeoutMinutes: {
       type: Number,
       default: 60,

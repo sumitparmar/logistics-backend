@@ -1,5 +1,19 @@
 const SystemSettings = require("../models/SystemSettings");
 const AuditLog = require("../models/AuditLog");
+const INVOICE_SETTINGS_FIELDS = [
+  "legalName",
+  "registeredAddress",
+  "state",
+  "stateCode",
+  "gstin",
+  "pan",
+  "sacCode",
+  "prefix",
+  "financialYearStartMonth",
+  "templateVersion",
+  "supportEmail",
+  "supportPhone",
+];
 const getOrCreateSettings = async () => {
   let settings = await SystemSettings.findOne();
 
@@ -86,6 +100,24 @@ const updateSettings = async (req, res) => {
         }
       }
     });
+
+    if (req.body.invoice && typeof req.body.invoice === "object") {
+      settings.invoice = settings.invoice || {};
+      INVOICE_SETTINGS_FIELDS.forEach((field) => {
+        if (req.body.invoice[field] === undefined) return;
+
+        const oldValue = settings.invoice[field];
+        const newValue = req.body.invoice[field];
+
+        if (String(oldValue ?? "") !== String(newValue ?? "")) {
+          changes[`invoice.${field}`] = {
+            oldValue,
+            newValue,
+          };
+          settings.invoice[field] = newValue;
+        }
+      });
+    }
 
     settings.updatedBy = req.user?._id || null;
 

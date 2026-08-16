@@ -139,4 +139,17 @@ ledgerEntrySchema.index({
   createdAt: -1,
 });
 
+// COD settlement is retried by both callbacks and background reconciliation.
+// The provider order reference makes the wallet credit idempotent.
+ledgerEntrySchema.index(
+  { reason: 1, reference: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      reason: "COD_SETTLEMENT",
+      reference: { $type: "string" },
+    },
+  },
+);
+
 module.exports = mongoose.model("LedgerEntry", ledgerEntrySchema);

@@ -5,9 +5,7 @@ const User = require("../models/User");
 const Order = require("../models/Order");
 const AdminRole = require("../models/AdminRole");
 const adminPermissions = require("../constants/adminPermissions");
-const { createInvoiceForOrder } = require("../services/invoice.service");
-const generateInvoicePdf = require("../utils/generateInvoicePdf");
-const sendEmail = require("../utils/sendEmail");
+const { processDeliveredOrder } = require("../services/invoice.service");
 const { creditWallet } = require("../services/wallet.service");
 const adminUsersService = require("../services/adminUsers.service");
 const ALL_PERMISSIONS = Object.values(adminPermissions).flatMap((module) =>
@@ -810,54 +808,8 @@ const updateOrderStatus = async (req, res) => {
       });
     }
 
-    if (isNewlyDelivered) {
-      try {
-        if (
-          savedOrder.cod?.enabled === true &&
-          savedOrder.codSettled !== true
-        ) {
-          await creditWallet({
-            userId: savedOrder.user,
-            amount: savedOrder.cod.amount,
-            reason: "COD_ORDER_DELIVERED",
-            reference: savedOrder._id.toString(),
-            metadata: {
-              borzoOrderId: savedOrder.borzoOrderId,
-            },
-          });
-
-          savedOrder.codSettled = true;
-          await savedOrder.save();
-        }
-
-        const invoice = await createInvoiceForOrder(savedOrder);
-
-        const user = await User.findById(savedOrder.user);
-
-        if (!user?.email) {
-        } else {
-          const pdfBuffer = await generateInvoicePdf(invoice, savedOrder, user);
-
-          await sendEmail(
-            user.email,
-            `Invoice ${invoice.invoiceNumber}`,
-            `
-          <h2>Delivery Completed</h2>
-          <p>Your order has been delivered successfully.</p>
-          <p>Your invoice is attached with this email.</p>
-        `,
-            [
-              {
-                filename: `${invoice.invoiceNumber}.pdf`,
-                content: pdfBuffer,
-                contentType: "application/pdf",
-              },
-            ],
-          );
-        }
-      } catch (error) {
-        console.error("INVOICE FLOW ERROR:", error);
-      }
+    if (savedOrder.status === "DELIVERED") {
+      await processDeliveredOrder(savedOrder);
     }
 
     emitOrderUpdate(savedOrder.user, savedOrder, { admin: true });
@@ -949,7 +901,11 @@ const updateOrdersBulkStatus = async (req, res) => {
     const updatedOrders = await Order.find({
       _id: { $in: orderIds },
       status: status,
-    }).select("_id");
+    });
+
+    if (status === "DELIVERED") {
+      await Promise.all(updatedOrders.map((order) => processDeliveredOrder(order)));
+    }
 
     const updatedIdSet = new Set(updatedOrders.map((o) => o._id.toString()));
 

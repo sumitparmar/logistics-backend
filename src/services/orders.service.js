@@ -21,6 +21,7 @@ const {
   notifyOrderDelivered,
 } = require("./deliveryNotification.service");
 const { emitOrderUpdate } = require("./realtime.service");
+const { processDeliveredOrder } = require("./invoice.service");
 
 const {
   createCustomerNotification,
@@ -111,18 +112,22 @@ const createOrderService = async (data) => {
 
   // Payment
   data.payment = data.payment || {
-    method: "BALANCE",
+    // Cash is the provider-supported live fallback while online checkout is
+    // waiting for gateway credentials. Advance payment must be explicit.
+    method: "CASH",
     feePayer: "DROP",
   };
 
+  const isEndOfDay =
+    data.deliveryType === "EOD" || data.deliveryType === "END_OF_DAY";
   data.vehicleTypeId = data.vehicleTypeId || data.vehicleType;
 
-  const vehicles = await getVehicleTypes();
+  const vehicles = isEndOfDay ? [] : await getVehicleTypes();
 
   const validVehicle = vehicles.find(
     (v) => String(v.id) === String(data.vehicleTypeId),
   );
-  if (!validVehicle) {
+  if (!isEndOfDay && !validVehicle) {
     const err = new Error("Invalid vehicle type");
     err.statusCode = 400;
     throw err;
@@ -130,7 +135,7 @@ const createOrderService = async (data) => {
 
   // Weight validation
   if (
-    validVehicle.maxWeightKg &&
+    validVehicle?.maxWeightKg &&
     Number(data.package?.weight) > validVehicle.maxWeightKg
   ) {
     const err = new Error(
@@ -179,7 +184,7 @@ const createOrderService = async (data) => {
   const pricingTotals = calculateAdminPricing({
     basePrice: baseAmount,
     config: pricingConfig,
-    vehicleType: String(data.vehicleTypeId),
+    vehicleType: String(isEndOfDay ? "" : data.vehicleTypeId || ""),
   });
 
   const adjustedAmount = pricingTotals.subtotal;
@@ -290,7 +295,7 @@ const createOrderService = async (data) => {
   }
 
   if (!createResponse?.order?.order_id) {
-    throw new Error("Invalid Borzo response");
+    throw new Error("Invalid delivery service response");
   }
 
   if (data.payment?.method === "WALLET") {
@@ -345,7 +350,7 @@ const createOrderService = async (data) => {
   }
 
   const vehicleTypeFromProvider =
-    createResponse.order.vehicle_type_id || validVehicle.id;
+    createResponse.order.vehicle_type_id || validVehicle?.id || null;
   const mappedStatus = mapBorzoStatus(providerStatus);
 
   const order = new Order({
@@ -401,6 +406,10 @@ const createOrderService = async (data) => {
   });
 
   const savedOrder = await order.save();
+
+  if (savedOrder.status === "DELIVERED") {
+    await processDeliveredOrder(savedOrder);
+  }
 
   if (paidIntent) {
     await attachOrderToIntent({
@@ -740,7 +749,7 @@ const syncOrderService = async (id, userId) => {
     !response.orders ||
     response.orders.length === 0
   ) {
-    throw new Error("Invalid Borzo sync response");
+    throw new Error("Invalid delivery synchronization response");
   }
 
   const borzoOrder = response.orders[0];
@@ -837,6 +846,10 @@ const syncOrderService = async (id, userId) => {
   order.rawProviderResponse = response;
 
   const savedOrder = await order.save();
+
+  if (savedOrder.status === "DELIVERED") {
+    await processDeliveredOrder(savedOrder);
+  }
 
   if (previousStatus !== mappedStatus) {
     try {

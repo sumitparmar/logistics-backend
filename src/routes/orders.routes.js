@@ -46,7 +46,13 @@ router.post(
 );
 
 // CALCULATE
-router.post("/calculate", validate(calculateOrderSchema), calculateOrder);
+router.post(
+  "/calculate",
+  protect,
+  orderLimiter,
+  validate(calculateOrderSchema),
+  calculateOrder,
+);
 
 // BULK
 router.post("/bulk", protect, createBulkOrders);

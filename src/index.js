@@ -14,6 +14,7 @@ const { initSocket } = require("./config/socket");
 const startReconciliationJob = require("./jobs/reconciliation.job");
 const startProviderHealthJob = require("./providers/providerHealth.job");
 const startOrderSyncJob = require("./jobs/orderSync.job");
+const startInvoiceRecoveryJob = require("./jobs/invoiceRecovery.job");
 
 // START SERVER FUNCTION
 const startServer = async () => {
@@ -23,6 +24,7 @@ const startServer = async () => {
   startReconciliationJob();
   startProviderHealthJob();
   startOrderSyncJob();
+  startInvoiceRecoveryJob();
   require("./jobs/analytics.job");
 
   const server = http.createServer(app);
@@ -31,6 +33,7 @@ const startServer = async () => {
   server.listen(PORT, () => {});
 
   require("./workers/otp.worker");
+  require("./workers/invoice.worker");
 };
 
 startServer();

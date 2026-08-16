@@ -1,10 +1,17 @@
 module.exports = [
   {
-    code: "cash",
-    name: "Cash",
+    code: "CASH",
+    name: "Cash on delivery",
+    gatewayRequired: false,
   },
   {
-    code: "balance",
-    name: "Balance",
+    code: "UPI",
+    name: "UPI, cards and net banking",
+    gatewayRequired: true,
+  },
+  {
+    code: "WALLET",
+    name: "MoveKart Wallet",
+    gatewayRequired: false,
   },
 ];

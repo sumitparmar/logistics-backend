@@ -28,6 +28,21 @@ if (process.env.NODE_ENV === "production") {
       "Missing required production environment variables: SMS_PROVIDER_URL",
     );
   }
+
+  const startMonth = process.env.INVOICE_FINANCIAL_YEAR_START_MONTH;
+  if (startMonth !== undefined && (!/^\d+$/.test(startMonth) || Number(startMonth) < 1 || Number(startMonth) > 12)) {
+    throw new Error("INVOICE_FINANCIAL_YEAR_START_MONTH must be an integer from 1 to 12");
+  }
+
+  const gstin = String(process.env.INVOICE_GSTIN || "").trim();
+  if (gstin && !/^\d{2}[A-Z0-9]{13}$/i.test(gstin)) {
+    throw new Error("INVOICE_GSTIN must be a valid 15-character GSTIN");
+  }
+
+  const invoicePrefix = String(process.env.INVOICE_PREFIX || "").trim();
+  if (invoicePrefix && !/^[A-Z0-9]{2,10}$/i.test(invoicePrefix)) {
+    throw new Error("INVOICE_PREFIX must contain 2 to 10 letters or numbers");
+  }
 }
 
 module.exports = {

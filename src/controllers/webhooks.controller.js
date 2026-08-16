@@ -8,10 +8,7 @@ const WebhookEvent = require("../models/WebhookEvent");
 const webhookFingerprint = require("../utils/webhookFingerprint");
 const { creditWallet } = require("../services/wallet.service");
 const { emitOrderUpdate } = require("../services/realtime.service");
-const { createInvoiceForOrder } = require("../services/invoice.service");
-const generateInvoicePdf = require("../utils/generateInvoicePdf");
-const sendEmail = require("../utils/sendEmail");
-const User = require("../models/User");
+const { processDeliveredOrder } = require("../services/invoice.service");
 
 const borzoWebhook = async (req, res) => {
   try {
@@ -88,6 +85,10 @@ const borzoWebhook = async (req, res) => {
     order.rawProviderResponse = payload;
 
     const savedOrder = await order.save();
+
+    if (savedOrder.status === "DELIVERED") {
+      await processDeliveredOrder(savedOrder);
+    }
 
     emitOrderUpdate(savedOrder.user, savedOrder, { admin: true });
 
@@ -166,8 +167,8 @@ const borzoDeliveryWebhook = async (req, res) => {
       await creditWallet({
         userId: order.user,
         amount: order.cod.amount,
-        reason: "COD_ORDER_DELIVERED",
-        reference: order._id.toString(),
+        reason: "COD_SETTLEMENT",
+        reference: order.borzoOrderId,
         metadata: {
           borzoOrderId: order.borzoOrderId,
         },
@@ -197,39 +198,8 @@ const borzoDeliveryWebhook = async (req, res) => {
 
     const savedOrder = await order.save();
 
-    if (isFirstDelivery) {
-      const invoice = await createInvoiceForOrder(savedOrder);
-
-      const user = await User.findById(savedOrder.user);
-
-      if (user?.email) {
-        const pdfBuffer = await generateInvoicePdf(invoice, savedOrder, user);
-
-        try {
-          await sendEmail(
-            user.email,
-            `Invoice ${invoice.invoiceNumber}`,
-            `
-          <h2>Delivery Completed</h2>
-          <p>Your order has been delivered successfully.</p>
-          <p>Your invoice is attached with this email.</p>
-          <p>Invoice Number: ${invoice.invoiceNumber}</p>
-          <p>Thank you for choosing MoveKart Logistics.</p>
-        `,
-            [
-              {
-                filename: `${invoice.invoiceNumber}.pdf`,
-                content: pdfBuffer,
-                contentType: "application/pdf",
-              },
-            ],
-          );
-        } catch (emailError) {
-          console.error("INVOICE EMAIL FAILED:", emailError.message);
-        }
-      } else {
-        console.warn(`NO EMAIL FOUND FOR USER: ${savedOrder.user}`);
-      }
+    if (savedOrder.status === "DELIVERED") {
+      await processDeliveredOrder(savedOrder);
     }
 
     emitOrderUpdate(savedOrder.user, savedOrder, { admin: true });

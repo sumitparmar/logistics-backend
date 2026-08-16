@@ -64,7 +64,11 @@ const createOrderSchema = Joi.object({
   // existing
   matter: Joi.string().required(),
   declaredValue: Joi.number().min(0).optional(),
-  vehicleTypeId: Joi.number().required(),
+  vehicleTypeId: Joi.number().when("deliveryType", {
+    is: Joi.valid("EOD", "END_OF_DAY"),
+    then: Joi.optional(),
+    otherwise: Joi.required(),
+  }),
 
   // NEW
   deliveryType: Joi.string()
@@ -122,7 +126,7 @@ const createOrderSchema = Joi.object({
   payment: Joi.object({
     method: Joi.string()
       .valid("CASH", "BANK_CARD", "CARD", "WALLET", "BALANCE")
-      .default("BALANCE"),
+      .default("CASH"),
     feePayer: Joi.string().valid("PICKUP", "DROP").default("DROP"),
     bankCardId: Joi.number().optional(),
     bank_card_id: Joi.number().optional(),

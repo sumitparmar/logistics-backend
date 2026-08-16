@@ -21,11 +21,108 @@ const {
   createBulkOrdersService,
 } = require("../services/orders.service");
 const { sendSuccess, sendError } = require("../utils/response");
+const IdempotencyRecord = require("../models/IdempotencyRecord");
+const Order = require("../models/Order");
+const { logAction } = require("../utils/audit");
+const crypto = require("crypto");
+
+const readIdempotencyKey = (req) => {
+  const key = req.get("Idempotency-Key") || req.body?.idempotencyKey;
+  if (!key) return null;
+
+  const normalized = String(key).trim();
+  if (normalized.length < 8 || normalized.length > 128) {
+    const err = new Error("Idempotency-Key must be between 8 and 128 characters");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  return normalized;
+};
+
+const reserveCreateOrder = async (userId, key, requestHash) => {
+  if (!key) return { key: null, record: null };
+
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+  try {
+    const record = await IdempotencyRecord.create({
+      user: userId,
+      operation: "CREATE_ORDER",
+      key,
+      requestHash,
+      status: "PENDING",
+      expiresAt,
+    });
+    return { key, record, replay: null };
+  } catch (error) {
+    if (error?.code !== 11000) throw error;
+
+    const existing = await IdempotencyRecord.findOne({
+      user: userId,
+      operation: "CREATE_ORDER",
+      key,
+    });
+
+    if (existing?.requestHash && existing.requestHash !== requestHash) {
+      const err = new Error("Idempotency-Key was already used for another request");
+      err.statusCode = 422;
+      throw err;
+    }
+
+    if (existing?.status === "SUCCEEDED" && existing.resource) {
+      const order = await Order.findOne({
+        _id: existing.resource,
+        user: userId,
+      });
+      if (order) return { key, record: existing, replay: order };
+    }
+
+    if (existing?.status === "PENDING") {
+      const err = new Error("A request with this Idempotency-Key is already processing");
+      err.statusCode = 409;
+      throw err;
+    }
+
+    const record = await IdempotencyRecord.findOneAndUpdate(
+      { _id: existing?._id, status: "FAILED" },
+      {
+        $set: { status: "PENDING", expiresAt, requestHash },
+        $unset: { resource: 1 },
+      },
+      { new: true },
+    );
+
+    if (!record) {
+      const err = new Error("A request with this Idempotency-Key is already processing");
+      err.statusCode = 409;
+      throw err;
+    }
+
+    return { key, record, replay: null };
+  }
+};
 
 // CREATE ORDER
 
 const createOrder = async (req, res, next) => {
+  let reservation = null;
   try {
+    const idempotencyKey = readIdempotencyKey(req);
+    const requestHash = crypto
+      .createHash("sha256")
+      .update(JSON.stringify(req.body || {}))
+      .digest("hex");
+    reservation = await reserveCreateOrder(
+      req.user._id,
+      idempotencyKey,
+      requestHash,
+    );
+
+    if (reservation.replay) {
+      return sendSuccess(res, reservation.replay, "Order already created", 200);
+    }
+
     const { customer, pickup, drop, matter, deliveryType, payment } = req.body;
 
     if (!customer || !pickup || !drop) {
@@ -55,14 +152,40 @@ const createOrder = async (req, res, next) => {
     const order = await createOrderService({
       ...req.body,
       user: req.user._id,
+      ...(idempotencyKey ? { idempotencyKey } : {}),
+    });
+
+    if (reservation.record) {
+      await IdempotencyRecord.findOneAndUpdate(
+        { _id: reservation.record._id, status: "PENDING" },
+        { $set: { status: "SUCCEEDED", resource: order._id } },
+      );
+    }
+
+    await logAction({
+      user: req.user._id,
+      action: "ORDER_CREATED",
+      req,
+      meta: {
+        orderId: order._id,
+        borzoOrderId: order.borzoOrderId,
+        provider: order.provider,
+        idempotencyKey: reservation.key || null,
+      },
     });
 
     return sendSuccess(res, order, "Order created", 201);
   } catch (error) {
+    if (reservation?.record) {
+      await IdempotencyRecord.findOneAndUpdate(
+        { _id: reservation.record._id, status: "PENDING" },
+        { $set: { status: "FAILED" } },
+      ).catch(() => {});
+    }
     return sendError(
       res,
       error.message || "Unable to create order at this time",
-      400,
+      error.statusCode || 400,
     );
   }
 };
@@ -113,6 +236,12 @@ const getPublicTrackingOrder = async (req, res, next) => {
 const cancelOrder = async (req, res, next) => {
   try {
     const order = await cancelOrderService(req.params.id, req.user._id);
+    await logAction({
+      user: req.user._id,
+      action: "ORDER_CANCELLED",
+      req,
+      meta: { orderId: order?._id || req.params.id },
+    });
     return sendSuccess(res, order, "Order cancelled");
   } catch (error) {
     next(error);
@@ -155,6 +284,12 @@ const calculateOrder = async (req, res, next) => {
 const editOrder = async (req, res, next) => {
   try {
     const order = await editOrderService(req.params.id, req.user._id, req.body);
+    await logAction({
+      user: req.user._id,
+      action: "ORDER_EDITED",
+      req,
+      meta: { orderId: order?._id || req.params.id },
+    });
     return sendSuccess(res, order, "Order updated");
   } catch (error) {
     next(error);

@@ -4,10 +4,11 @@ const createGatewayOrder = async ({ amount, currency }) => {
   if (!Number.isFinite(Number(amount)) || Number(amount) <= 0) {
     throw new Error("Invalid payment amount");
   }
-  if (
-    process.env.PAYMENT_GATEWAY_MODE === "MOCK" ||
-    (process.env.NODE_ENV !== "production" && !razorpay)
-  ) {
+  const mockGatewayEnabled =
+    process.env.NODE_ENV !== "production" &&
+    process.env.PAYMENT_GATEWAY_MODE === "MOCK";
+
+  if (mockGatewayEnabled) {
     return {
       id: `mock_order_${Date.now()}`,
       amount: Math.round(Number(amount) * 100),
@@ -16,7 +17,7 @@ const createGatewayOrder = async ({ amount, currency }) => {
   }
 
   if (!razorpay) {
-    throw new Error("Payment gateway not configured");
+    throw new Error("Online payment is not configured");
   }
 
   return razorpay.orders.create({

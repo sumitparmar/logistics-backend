@@ -1,5 +1,6 @@
 const PaymentIntent = require("../models/PaymentIntent");
 const { creditWallet } = require("../services/wallet.service");
+const { markSuccess } = require("../services/paymentIntent.service");
 const crypto = require("crypto");
 
 const verifyRazorpayWebhook = (req) => {
@@ -33,33 +34,40 @@ const paymentSuccessWebhook = async (req, res) => {
       return res.status(401).json({ received: false });
     }
 
-    const { gatewayOrderId, gatewayPaymentId } = req.body;
+    const payload = req.body?.payload?.payment?.entity || req.body || {};
+    const gatewayOrderId = payload.order_id || payload.gatewayOrderId;
+    const gatewayPaymentId = payload.id || payload.gatewayPaymentId;
+    const existing = await PaymentIntent.findOne({
+      gatewayOrderId,
+      status: "PROCESSING",
+    });
 
-    const intent = await PaymentIntent.findOneAndUpdate(
-      { gatewayOrderId },
-      {
-        $set: {
-          status: "SUCCESS",
+    const intent = existing
+      ? await markSuccess({
+          intentId: existing._id,
           gatewayPaymentId,
-        },
-        $push: { statusHistory: { status: "SUCCESS" } },
-      },
-      { new: true },
-    );
+          metadata: {
+            ...(existing.metadata || {}),
+            gateway: "RAZORPAY",
+            source: "WEBHOOK",
+          },
+        })
+      : null;
 
     // Already processed OR not found
     if (!intent) {
       return res.json({ received: true });
     }
 
-    // Auto wallet credit
-    await creditWallet({
-      userId: intent.user,
-      amount: intent.amount,
-      reason: "PAYMENT_SUCCESS",
-      reference: intent._id.toString(),
-      metadata: { gateway: intent.gateway },
-    });
+    if (intent.metadata?.purpose === "WALLET_TOPUP") {
+      await creditWallet({
+        userId: intent.user,
+        amount: intent.amount,
+        reason: "PAYMENT_SUCCESS",
+        reference: intent._id.toString(),
+        metadata: { gateway: intent.gateway, gatewayPaymentId },
+      });
+    }
 
     return res.json({ received: true });
   } catch (err) {

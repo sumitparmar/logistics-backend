@@ -1,28 +1,7 @@
+// The current MoveKart Borzo production account accepts only vehicle type 8.
+// Borzo documents other IDs globally, but the account rejects them with
+// invalid_vehicle_type, so unsupported choices must not reach the UI or API.
 module.exports = [
-  {
-    id: 1,
-    code: "MINI_3W",
-    name: "Mini 3-Wheeler",
-    maxWeightKg: 100,
-  },
-  {
-    id: 2,
-    code: "TATA_ACE_8FT",
-    name: "Tata Ace 8ft",
-    maxWeightKg: 1000,
-  },
-  {
-    id: 3,
-    code: "TATA_ACE_7FT",
-    name: "Tata Ace 7ft",
-    maxWeightKg: 750,
-  },
-  {
-    id: 5,
-    code: "TEMPO",
-    name: "Tempo Truck",
-    maxWeightKg: 200,
-  },
   {
     id: 8,
     code: "BIKE",

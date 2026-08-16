@@ -1,5 +1,8 @@
+const vehicleTypes = require("../constants/vehicleTypes");
+const crypto = require("crypto");
+
 const DEFAULT_BORZO_VEHICLE = 8;
-const VALID_BORZO_VEHICLE_IDS = [1, 2, 3, 5, 8];
+const VALID_BORZO_VEHICLE_IDS = vehicleTypes.map((vehicle) => vehicle.id);
 
 function isBorzoNotificationEnabled() {
   return String(process.env.BORZO_SEND_NOTIFICATIONS || "true") !== "false";
@@ -22,9 +25,50 @@ function isEndOfDay(data) {
   return data.deliveryType === "EOD" || data.deliveryType === "END_OF_DAY";
 }
 
+function getTotalWeight(data, { required = false } = {}) {
+  const weight = Number(data.package?.weight);
+
+  if (required && (!Number.isFinite(weight) || weight <= 0)) {
+    throw new Error("A positive package weight is required for end-of-day delivery");
+  }
+
+  return Number.isFinite(weight) && weight > 0 ? weight : 0;
+}
+
+function normalizeClientOrderId(value) {
+  if (!value) return null;
+  return `mk_${crypto
+    .createHash("sha256")
+    .update(String(value))
+    .digest("hex")
+    .slice(0, 29)}`;
+}
+
+function removeScheduleFields(point) {
+  const cleanPoint = { ...point };
+  delete cleanPoint.required_start_datetime;
+  delete cleanPoint.required_finish_datetime;
+  return cleanPoint;
+}
+
 function resolveVehicleId(vehicleTypeId) {
+  if (
+    vehicleTypeId === undefined ||
+    vehicleTypeId === null ||
+    vehicleTypeId === ""
+  ) {
+    return DEFAULT_BORZO_VEHICLE;
+  }
+
   const id = Number(vehicleTypeId);
-  return VALID_BORZO_VEHICLE_IDS.includes(id) ? id : DEFAULT_BORZO_VEHICLE;
+  if (VALID_BORZO_VEHICLE_IDS.includes(id)) {
+    return id;
+  }
+
+  const err = new Error(`Unsupported vehicle type: ${vehicleTypeId}`);
+  err.statusCode = 400;
+  err.code = "INVALID_VEHICLE_TYPE";
+  throw err;
 }
 
 // function applyPaymentMethod(payload, payment = {}) {
@@ -85,7 +129,7 @@ function applyPaymentMethod(payload, payment = {}) {
 }
 
 function applyCashPaymentPoint(payload, payment = {}) {
-  const method = String(payment.method || "BALANCE").toUpperCase();
+  const method = String(payment.method || "CASH").toUpperCase();
 
   if (method && method !== "CASH") {
     return;
@@ -124,10 +168,14 @@ function assertEndOfDayPointCount(data) {
   }
 }
 
-function mapDeliveryStops(data, { includeContacts = false } = {}) {
+function mapDeliveryStops(
+  data,
+  { includeContacts = false, clientOrderId = null } = {},
+) {
   return getDeliveryStops(data).map((stop) => {
     const point = {
       address: stop.address,
+      ...(clientOrderId ? { client_order_id: clientOrderId } : {}),
     };
 
     if (stop.lat !== undefined && stop.lat !== null) {
@@ -166,6 +214,7 @@ function applySchedule(payload, scheduledAt) {
   }
 
   payload.type = "standard";
+  payload.points = payload.points.map(removeScheduleFields);
   payload.points[0].required_start_datetime = toISTString(scheduled);
   payload.points[0].required_finish_datetime = toISTString(
     new Date(scheduled.getTime() + 30 * 60 * 1000),
@@ -186,13 +235,11 @@ const mapCalculatePayload = (data) => {
   const payload = {
     matter: data.matter,
 
-    vehicle_type_id: resolveVehicleId(data.vehicleTypeId),
-
     is_client_notification_enabled: isBorzoNotificationEnabled(),
 
     is_contact_person_notification_enabled: isBorzoNotificationEnabled(),
 
-    total_weight_kg: Number(data.package?.weight || 0),
+    total_weight_kg: getTotalWeight(data, { required: isEndOfDay(data) }),
 
     insurance_amount: data.package?.declaredValue
       ? String(Number(data.package.declaredValue).toFixed(2))
@@ -221,6 +268,10 @@ const mapCalculatePayload = (data) => {
     ],
   };
 
+  if (!isEndOfDay(data)) {
+    payload.vehicle_type_id = resolveVehicleId(data.vehicleTypeId);
+  }
+
   applyPaymentMethod(payload, data.payment);
 
   applyCashPaymentPoint(payload, data.payment);
@@ -234,7 +285,7 @@ const mapCalculatePayload = (data) => {
   if (isEndOfDay(data)) {
     payload.type = "endofday";
 
-    payload.total_weight_kg = Number(data.package?.weight || 1);
+    payload.total_weight_kg = getTotalWeight(data, { required: true });
 
     // Borzo restriction:
     // vehicle_type_id prohibited
@@ -242,15 +293,7 @@ const mapCalculatePayload = (data) => {
 
     // Borzo restriction:
     // schedule fields prohibited
-    payload.points = payload.points.map((point) => {
-      const cleanPoint = { ...point };
-
-      delete cleanPoint.required_start_datetime;
-
-      delete cleanPoint.required_finish_datetime;
-
-      return cleanPoint;
-    });
+    payload.points = payload.points.map(removeScheduleFields);
   }
 
   return payload;
@@ -271,8 +314,12 @@ const mapCreateOrderPayload = (data) => {
 
   assertEndOfDayPointCount(data);
 
+  const clientOrderId = normalizeClientOrderId(
+    data.clientOrderId || data.idempotencyKey,
+  );
   const deliveryPoints = mapDeliveryStops(data, {
     includeContacts: true,
+    clientOrderId,
   });
 
   if (
@@ -310,6 +357,7 @@ const mapCreateOrderPayload = (data) => {
     },
 
     note: data.pickup?.notes || data.pickupNotes || null,
+    ...(clientOrderId ? { client_order_id: clientOrderId } : {}),
   };
 
   // COD
@@ -324,13 +372,11 @@ const mapCreateOrderPayload = (data) => {
   const payload = {
     matter: data.matter,
 
-    vehicle_type_id: resolveVehicleId(data.vehicleTypeId),
-
     is_client_notification_enabled: isBorzoNotificationEnabled(),
 
     is_contact_person_notification_enabled: isBorzoNotificationEnabled(),
 
-    total_weight_kg: Number(data.package?.weight || 0),
+    total_weight_kg: getTotalWeight(data, { required: isEndOfDay(data) }),
 
     insurance_amount: data.package?.declaredValue
       ? String(Number(data.package.declaredValue).toFixed(2))
@@ -338,6 +384,10 @@ const mapCreateOrderPayload = (data) => {
 
     points: [pickupPoint, ...deliveryPoints],
   };
+
+  if (!isEndOfDay(data)) {
+    payload.vehicle_type_id = resolveVehicleId(data.vehicleTypeId);
+  }
 
   applyPaymentMethod(payload, data.payment);
 
@@ -352,7 +402,7 @@ const mapCreateOrderPayload = (data) => {
   if (isEndOfDay(data)) {
     payload.type = "endofday";
 
-    payload.total_weight_kg = Number(data.package?.weight || 1);
+    payload.total_weight_kg = getTotalWeight(data, { required: true });
 
     // Borzo restriction:
     // vehicle_type_id prohibited
@@ -360,15 +410,7 @@ const mapCreateOrderPayload = (data) => {
 
     // Borzo restriction:
     // schedule fields prohibited
-    payload.points = payload.points.map((point) => {
-      const cleanPoint = { ...point };
-
-      delete cleanPoint.required_start_datetime;
-
-      delete cleanPoint.required_finish_datetime;
-
-      return cleanPoint;
-    });
+    payload.points = payload.points.map(removeScheduleFields);
   }
 
   return payload;
@@ -379,27 +421,31 @@ const mapEditPayload = (borzoOrderId, data, existingOrder) => {
     order_id: Number(borzoOrderId),
   };
 
+  const isExistingEndOfDay =
+    existingOrder?.deliveryType === "END_OF_DAY" ||
+    existingOrder?.deliveryType === "EOD";
+
   if (data.matter !== undefined) {
     payload.matter = data.matter;
   }
 
   if (data.total_weight_kg !== undefined) {
-    payload.total_weight_kg = Number(data.total_weight_kg);
+    const weight = Number(data.total_weight_kg);
+    if (isExistingEndOfDay && (!Number.isFinite(weight) || weight <= 0)) {
+      throw new Error("A positive package weight is required for end-of-day delivery");
+    }
+    payload.total_weight_kg = weight;
   }
 
   const vehicleTypeId = data.vehicleTypeId || data.vehicle_type_id;
-  if (vehicleTypeId !== undefined && vehicleTypeId !== null) {
-    payload.vehicle_type_id = Number(vehicleTypeId);
+  if (!isExistingEndOfDay && vehicleTypeId !== undefined && vehicleTypeId !== null) {
+    payload.vehicle_type_id = resolveVehicleId(vehicleTypeId);
   }
   const providerOrder =
     existingOrder?.rawProviderResponse?.order ||
     existingOrder?.rawProviderResponse?.orders?.[0];
 
   if (data.points && providerOrder?.points) {
-    const isExistingEndOfDay =
-      existingOrder?.deliveryType === "END_OF_DAY" ||
-      existingOrder?.deliveryType === "EOD";
-
     payload.points = data.points
       .map((p, index) => {
         const existingPoint = providerOrder.points[index];
@@ -436,7 +482,7 @@ const mapEditPayload = (borzoOrderId, data, existingOrder) => {
           ),
         };
 
-        if (!isExistingEndOfDay) {
+        if (!isExistingEndOfDay && index === 0) {
           if (existingPoint.required_start_datetime) {
             point.required_start_datetime =
               existingPoint.required_start_datetime;

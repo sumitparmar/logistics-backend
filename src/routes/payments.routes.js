@@ -11,6 +11,7 @@ const {
   getLedger,
   downloadStatement,
   createPaymentIntentAndGatewayOrder,
+  verifyPaymentIntent,
   confirmMockPaymentIntent,
   refundPayment,
 } = require("../controllers/payments.controller");
@@ -30,6 +31,7 @@ router.get("/statement", protect, downloadStatement);
 router.post("/payin", protect, payIn);
 router.post("/payout", protect, payOut);
 router.post("/intent", protect, createPaymentIntentAndGatewayOrder);
+router.post("/intent/:id/verify", protect, verifyPaymentIntent);
 router.post("/intent/:id/mock-confirm", protect, confirmMockPaymentIntent);
 router.post("/refund", protect, refundPayment);
 

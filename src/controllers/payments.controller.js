@@ -4,9 +4,11 @@ const {
   createPaymentIntent,
   markProcessing,
   markSuccess,
+  markFailed,
 } = require("../services/paymentIntent.service");
 const { createGatewayOrder } = require("../services/gateway.service");
 const PaymentIntent = require("../models/PaymentIntent");
+const crypto = require("crypto");
 const {
   creditWallet,
   debitWallet,
@@ -17,16 +19,39 @@ const LedgerEntry = require("../models/LedgerEntry");
 const Wallet = require("../models/Wallet");
 const ExcelJS = require("exceljs");
 
-// PAYMENT METHODS (STATIC)
-
 const getPaymentMethods = async (req, res) => {
-  return sendSuccess(res, paymentMethods, "Payment methods fetched");
+  const mockGatewayAvailable =
+    process.env.NODE_ENV !== "production" &&
+    process.env.PAYMENT_GATEWAY_MODE === "MOCK";
+  const gatewayAvailable = Boolean(
+    mockGatewayAvailable ||
+      (process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET),
+  );
+
+  return sendSuccess(
+    res,
+    paymentMethods.filter((method) =>
+      method.gatewayRequired ? gatewayAvailable : true,
+    ),
+    "Payment methods fetched",
+  );
 };
 
 // PAY-IN
 
 const payIn = async (req, res, next) => {
   try {
+    if (
+      process.env.NODE_ENV === "production" &&
+      process.env.PAYMENT_GATEWAY_MODE !== "MOCK"
+    ) {
+      const err = new Error(
+        "Wallet top-ups must be completed through the payment gateway",
+      );
+      err.statusCode = 410;
+      throw err;
+    }
+
     const { amount, reason, reference, metadata } = req.body;
 
     const wallet = await creditWallet({
@@ -375,25 +400,52 @@ const downloadStatement = async (req, res, next) => {
 
 const createPaymentIntentAndGatewayOrder = async (req, res, next) => {
   try {
-    const { amount, paymentMethod } = req.body;
+    const { amount, paymentMethod, purpose = "ORDER_PAYMENT" } = req.body;
+
+    if (!["ORDER_PAYMENT", "WALLET_TOPUP"].includes(purpose)) {
+      const err = new Error("Invalid payment purpose");
+      err.statusCode = 400;
+      throw err;
+    }
+
+    if (purpose === "WALLET_TOPUP" && Number(amount) > 100000) {
+      const err = new Error("Wallet top-up limit is INR 100000");
+      err.statusCode = 400;
+      throw err;
+    }
+
     //  Create internal intent first
-    const intent = await createPaymentIntent({
+    let intent = await createPaymentIntent({
       userId: req.user._id,
       amount,
       paymentMethod,
+      purpose,
     });
 
-    //  Create Razorpay order
-    const gatewayOrder = await createGatewayOrder({
-      amount: intent.amount,
-      currency: intent.currency,
-    });
+    let gatewayOrder;
+    try {
+      gatewayOrder = await createGatewayOrder({
+        amount: intent.amount,
+        currency: intent.currency,
+      });
+    } catch (error) {
+      await markFailed({
+        intentId: intent._id,
+        metadata: { failure: "GATEWAY_ORDER_CREATION_FAILED" },
+      });
+      throw error;
+    }
 
     // Attach gateway order ID
     intent.gatewayOrderId = gatewayOrder.id;
     await intent.save();
 
-    await markProcessing(intent._id);
+    const processingIntent = await markProcessing(intent._id);
+    if (!processingIntent) {
+      const err = new Error("Payment intent could not be prepared");
+      err.statusCode = 409;
+      throw err;
+    }
 
     return sendSuccess(
       res,
@@ -414,10 +466,12 @@ const createPaymentIntentAndGatewayOrder = async (req, res, next) => {
 const confirmMockPaymentIntent = async (req, res, next) => {
   try {
     if (
-      process.env.NODE_ENV === "production" &&
+      process.env.NODE_ENV === "production" ||
       process.env.PAYMENT_GATEWAY_MODE !== "MOCK"
     ) {
-      const err = new Error("Mock payment confirmation is disabled");
+      const err = new Error(
+        "Mock payment confirmation is available only in non-production environments",
+      );
       err.statusCode = 403;
       throw err;
     }
@@ -450,6 +504,114 @@ const confirmMockPaymentIntent = async (req, res, next) => {
         status: updated.status,
       },
       "Mock payment confirmed",
+    );
+  } catch (err) {
+    next(err);
+  }
+};
+
+const verifyPaymentIntent = async (req, res, next) => {
+  try {
+    const {
+      razorpay_payment_id: paymentId,
+      razorpay_order_id: orderId,
+      razorpay_signature: signature,
+    } = req.body || {};
+
+    const intent = await PaymentIntent.findOne({
+      _id: req.params.id,
+      user: req.user._id,
+    });
+
+    if (!intent || !paymentId || !orderId || !signature) {
+      const err = new Error("Payment verification details are incomplete");
+      err.statusCode = 400;
+      throw err;
+    }
+
+    if (
+      intent.status === "SUCCESS" &&
+      String(intent.gatewayPaymentId) === String(paymentId)
+    ) {
+      return sendSuccess(
+        res,
+        { intentId: intent._id, status: intent.status },
+        "Payment already verified",
+      );
+    }
+
+    if (intent.status !== "PROCESSING") {
+      const err = new Error("Payment intent is not processable");
+      err.statusCode = 409;
+      throw err;
+    }
+
+    if (String(intent.gatewayOrderId) !== String(orderId)) {
+      const err = new Error("Payment order does not match the payment intent");
+      err.statusCode = 409;
+      throw err;
+    }
+
+    if (!process.env.RAZORPAY_KEY_SECRET) {
+      const err = new Error("Payment gateway verification is not configured");
+      err.statusCode = 503;
+      throw err;
+    }
+
+    const expectedSignature = crypto
+      .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
+      .update(`${orderId}|${paymentId}`)
+      .digest("hex");
+
+    const received = Buffer.from(String(signature));
+    const expected = Buffer.from(expectedSignature);
+
+    if (
+      received.length !== expected.length ||
+      !crypto.timingSafeEqual(received, expected)
+    ) {
+      await markFailed({
+        intentId: intent._id,
+        metadata: { gateway: "RAZORPAY", failure: "INVALID_SIGNATURE" },
+      });
+      const err = new Error("Payment signature verification failed");
+      err.statusCode = 400;
+      throw err;
+    }
+
+    const updated = await markSuccess({
+      intentId: intent._id,
+      gatewayPaymentId: paymentId,
+      metadata: {
+        ...(intent.metadata || {}),
+        gateway: "RAZORPAY",
+        verifiedAt: new Date().toISOString(),
+      },
+    });
+
+    if (!updated) {
+      const err = new Error("Payment intent was already processed");
+      err.statusCode = 409;
+      throw err;
+    }
+
+    if (updated.metadata?.purpose === "WALLET_TOPUP") {
+      await creditWallet({
+        userId: updated.user,
+        amount: updated.amount,
+        reason: "PAYMENT_SUCCESS",
+        reference: String(updated._id),
+        metadata: {
+          gateway: "RAZORPAY",
+          gatewayPaymentId: paymentId,
+        },
+      });
+    }
+
+    return sendSuccess(
+      res,
+      { intentId: updated._id, status: updated.status },
+      "Payment verified",
     );
   } catch (err) {
     next(err);
@@ -496,6 +658,7 @@ module.exports = {
   downloadStatement,
 
   createPaymentIntentAndGatewayOrder,
+  verifyPaymentIntent,
   confirmMockPaymentIntent,
 
   refundPayment,
