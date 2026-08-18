@@ -264,6 +264,10 @@ const orderSchema = new mongoose.Schema(
   { timestamps: true },
 );
 
+// Admin driver views aggregate and drill into courier assignments frequently.
+orderSchema.index({ "courier.courierId": 1, createdAt: -1 });
+orderSchema.index({ createdAt: -1, _id: -1 });
+
 orderSchema.index({ borzoOrderId: 1, provider: 1 }, { unique: true });
 orderSchema.index({ user: 1 });
 orderSchema.index({ user: 1, createdAt: -1 });

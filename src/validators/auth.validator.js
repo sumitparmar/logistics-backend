@@ -2,7 +2,7 @@ const Joi = require("joi");
 
 const phoneRule = Joi.string()
   .trim()
-  .pattern(/^[0-9+\-\s()]{8,20}$/)
+  .pattern(/^[0-9]{10}$/)
   .messages({
     "string.pattern.base": "Enter valid phone number",
   });

@@ -117,6 +117,10 @@ const getProfile = async (req, res, next) => {
 
 const updateProfile = async (req, res, next) => {
   try {
+    if (req.body.phone !== undefined && !/^\d{10}$/.test(String(req.body.phone).trim())) {
+      return sendError(res, "Phone number must contain exactly 10 digits", 400);
+    }
+
     const updates = {
       name: req.body.name,
       phone: req.body.phone ? normalizePhone(req.body.phone) : undefined,

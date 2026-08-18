@@ -1,13 +1,10 @@
 const {
-  createAdminNotification,
   getAdminNotifications,
   markAdminNotificationRead,
   markAllAdminNotificationsRead,
   deleteAdminNotification,
   getAdminUnreadCount,
 } = require("../services/adminNotification.service");
-
-const { getIO } = require("../config/socket");
 
 const fetchAdminNotifications = async (req, res) => {
   try {
@@ -30,6 +27,13 @@ const fetchAdminNotifications = async (req, res) => {
 const markAdminNotificationAsRead = async (req, res) => {
   try {
     const data = await markAdminNotificationRead(req.params.id);
+
+    if (!data) {
+      return res.status(404).json({
+        success: false,
+        message: "Notification not found",
+      });
+    }
 
     res.json({
       success: true,
@@ -104,37 +108,10 @@ const fetchAdminUnreadCount = async (req, res) => {
   }
 };
 
-const createTestNotification = async (req, res) => {
-  try {
-    const notification = await createAdminNotification({
-      type: "SYSTEM",
-      title: "Test Notification",
-      message: "This is a test notification from backend",
-      priority: "HIGH",
-    });
-
-    const io = getIO();
-    io.to("admin").emit("admin_notification", notification);
-
-    res.json({
-      success: true,
-      message: "Test notification created",
-      data: notification,
-    });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({
-      success: false,
-      message: "Failed to create test notification",
-    });
-  }
-};
-
 module.exports = {
   fetchAdminNotifications,
   markAdminNotificationAsRead,
   markAllAdminNotificationsAsRead,
   deleteAdminNotificationById,
   fetchAdminUnreadCount,
-  createTestNotification,
 };

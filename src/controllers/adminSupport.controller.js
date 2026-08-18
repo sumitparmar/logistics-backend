@@ -2,7 +2,7 @@ const AdminSupportTicket = require("../models/AdminSupportTicket");
 const mongoose = require("mongoose");
 const User = require("../models/User");
 const { getIO } = require("../config/socket");
-const AdminNotification = require("../models/AdminNotification");
+const { createAdminNotification } = require("../services/adminNotification.service");
 // GET SUPPORT TICKETS
 
 const escapeRegex = (text) => {
@@ -426,6 +426,13 @@ const createSupportTicket = async (req, res) => {
     //  CREATE TICKET
     const { name, email, phone } = req.body;
 
+    if (phone && !/^\d{10}$/.test(String(phone).trim())) {
+      return res.status(400).json({
+        success: false,
+        message: "Phone number must contain exactly 10 digits",
+      });
+    }
+
     const ticket = await AdminSupportTicket.create({
       user: userId || null,
       name: userExists?.name || name,
@@ -450,7 +457,7 @@ const createSupportTicket = async (req, res) => {
 
     await ticket.save();
 
-    await AdminNotification.create({
+    await createAdminNotification({
       type: "SYSTEM",
       title: "New Support Ticket",
       message: subject,

@@ -11,6 +11,10 @@ const createAddress = async (userId, data) => {
     throw new Error("All required fields must be provided");
   }
 
+  if (!/^\d{10}$/.test(String(phone).trim())) {
+    throw new Error("Phone number must contain exactly 10 digits");
+  }
+
   return await SavedAddress.create({
     ...data,
     userId,

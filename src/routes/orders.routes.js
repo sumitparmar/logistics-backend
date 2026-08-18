@@ -48,7 +48,6 @@ router.post(
 // CALCULATE
 router.post(
   "/calculate",
-  protect,
   orderLimiter,
   validate(calculateOrderSchema),
   calculateOrder,

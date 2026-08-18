@@ -1,4 +1,5 @@
 const DriverOnboarding = require("../models/DriverOnboarding");
+const PublicDriverOnboarding = require("../models/PublicDriverOnboarding");
 const SystemSettings = require("../models/SystemSettings");
 const { getVehicleTypes } = require("./providerCatalog.service");
 const { getIO } = require("../config/socket");
@@ -34,6 +35,12 @@ const emitDriverOnboardingUpdate = (application) => {
 };
 
 const sanitizePayload = async (payload) => {
+  if (!/^\d{10}$/.test(String(payload?.personal?.phone || '').trim())) {
+    const err = new Error("Phone number must contain exactly 10 digits");
+    err.statusCode = 400;
+    throw err;
+  }
+
   const vehicleTypeId = Number(payload?.vehicle?.vehicleTypeId);
   const vehicles = await getVehicleTypes();
   const vehicle = vehicles.find((item) => Number(item.id) === vehicleTypeId);
@@ -146,6 +153,33 @@ const getDriverOnboardingOptions = async () => {
   };
 };
 
+const submitPublicDriverOnboarding = async (payload) => {
+  const data = await sanitizePayload(payload);
+
+  if (!data.personal?.email) {
+    const err = new Error("Email is required for a public application");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  if (!data.consent?.termsAccepted || !data.consent?.backgroundCheckAccepted) {
+    const err = new Error("Required consent is missing");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  data.status = "SUBMITTED";
+  data.submittedAt = new Date();
+  data.consent.acceptedAt = new Date();
+
+  const application = await PublicDriverOnboarding.create(data);
+  emitDriverOnboardingUpdate({
+    ...application.toObject(),
+    source: "PUBLIC",
+  });
+  return application;
+};
+
 const saveMyDriverOnboarding = async ({ userId, payload, submit = false }) => {
   const data = await sanitizePayload(payload);
   const existing = await DriverOnboarding.findOne({ user: userId });
@@ -204,29 +238,54 @@ const listDriverOnboarding = async (query = {}) => {
     ];
   }
 
-  const [data, total] = await Promise.all([
+  const publicFilter = { ...filter };
+  const fetchLimit = skip + limit;
+
+  const [data, publicData, total, publicTotal] = await Promise.all([
     DriverOnboarding.find(filter)
       .populate("user", "name email phone role")
       .sort({ updatedAt: -1 })
-      .skip(skip)
-      .limit(limit)
+      .limit(fetchLimit)
+      .lean(),
+    PublicDriverOnboarding.find(publicFilter)
+      .sort({ updatedAt: -1 })
+      .limit(fetchLimit)
       .lean(),
     DriverOnboarding.countDocuments(filter),
+    PublicDriverOnboarding.countDocuments(publicFilter),
   ]);
 
+  const combined = [
+    ...data,
+    ...publicData.map((application) => ({
+      ...application,
+      user: null,
+      source: "PUBLIC",
+    })),
+  ]
+    .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+    .slice(skip, skip + limit);
+
   return {
-    data,
+    data: combined,
     pagination: {
       page,
       limit,
-      total,
-      totalPages: Math.ceil(total / limit),
+      total: total + publicTotal,
+      totalPages: Math.ceil((total + publicTotal) / limit),
     },
   };
 };
 
-const updateDriverOnboardingStatus = async ({ id, status, remarks, adminId }) => {
-  const application = await DriverOnboarding.findByIdAndUpdate(
+const updateDriverOnboardingStatus = async ({
+  id,
+  status,
+  remarks,
+  adminId,
+  source = "AUTHENTICATED",
+}) => {
+  const Model = source === "PUBLIC" ? PublicDriverOnboarding : DriverOnboarding;
+  const application = await Model.findByIdAndUpdate(
     id,
     {
       $set: {
@@ -254,6 +313,7 @@ const updateDriverOnboardingStatus = async ({ id, status, remarks, adminId }) =>
 module.exports = {
   getMyDriverOnboarding,
   getDriverOnboardingOptions,
+  submitPublicDriverOnboarding,
   saveMyDriverOnboarding,
   listDriverOnboarding,
   updateDriverOnboardingStatus,

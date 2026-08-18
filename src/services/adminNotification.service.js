@@ -1,7 +1,22 @@
 const AdminNotification = require("../models/AdminNotification");
+const { getIO } = require("../config/socket");
+
+const emitAdminNotification = (notification) => {
+  try {
+    getIO().to("admin").emit(
+      "admin_notification",
+      notification?.toObject ? notification.toObject() : notification,
+    );
+  } catch (error) {
+    // Socket delivery is best effort; the persisted notification remains available.
+    console.error("Admin notification socket emit failed:", error.message);
+  }
+};
 
 const createAdminNotification = async (payload) => {
-  return await AdminNotification.create(payload);
+  const notification = await AdminNotification.create(payload);
+  emitAdminNotification(notification);
+  return notification;
 };
 
 const getAdminNotifications = async ({
@@ -44,7 +59,9 @@ const getAdminNotifications = async ({
     pagination: {
       total,
       page,
+      limit,
       pages: Math.ceil(total / limit),
+      totalPages: Math.ceil(total / limit),
     },
   };
 };
@@ -58,7 +75,15 @@ const markAdminNotificationRead = async (id) => {
 };
 
 const markAllAdminNotificationsRead = async () => {
-  return AdminNotification.updateMany({ isRead: false }, { isRead: true });
+  const result = await AdminNotification.updateMany(
+    { isRead: false },
+    { isRead: true },
+  );
+
+  return {
+    matchedCount: result.matchedCount ?? result.n ?? 0,
+    modifiedCount: result.modifiedCount ?? result.nModified ?? 0,
+  };
 };
 
 const deleteAdminNotification = async (id) => {

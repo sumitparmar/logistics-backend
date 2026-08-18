@@ -2,10 +2,29 @@ const { sendSuccess } = require("../utils/response");
 const {
   getMyDriverOnboarding,
   getDriverOnboardingOptions,
+  submitPublicDriverOnboarding,
   saveMyDriverOnboarding,
   listDriverOnboarding,
   updateDriverOnboardingStatus,
 } = require("../services/driverOnboarding.service");
+
+const getPublicOptions = async (req, res, next) => {
+  try {
+    const options = await getDriverOnboardingOptions();
+    return sendSuccess(res, options, "Driver onboarding options fetched");
+  } catch (err) {
+    next(err);
+  }
+};
+
+const submitPublic = async (req, res, next) => {
+  try {
+    const application = await submitPublicDriverOnboarding(req.body);
+    return sendSuccess(res, application, "Driver onboarding submitted", 201);
+  } catch (err) {
+    next(err);
+  }
+};
 
 const getOptions = async (req, res, next) => {
   try {
@@ -65,7 +84,7 @@ const listApplications = async (req, res, next) => {
 
 const updateApplicationStatus = async (req, res, next) => {
   try {
-    const { status, remarks } = req.body;
+    const { status, remarks, source } = req.body;
 
     if (!["UNDER_REVIEW", "APPROVED", "REJECTED"].includes(status)) {
       const err = new Error("Invalid onboarding status");
@@ -78,6 +97,7 @@ const updateApplicationStatus = async (req, res, next) => {
       status,
       remarks,
       adminId: req.user._id,
+      source,
     });
 
     return sendSuccess(res, application, "Driver onboarding updated");
@@ -89,6 +109,8 @@ const updateApplicationStatus = async (req, res, next) => {
 module.exports = {
   getMine,
   getOptions,
+  getPublicOptions,
+  submitPublic,
   saveMine,
   submitMine,
   listApplications,

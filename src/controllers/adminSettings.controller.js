@@ -14,6 +14,8 @@ const INVOICE_SETTINGS_FIELDS = [
   "supportEmail",
   "supportPhone",
 ];
+
+const isValidPhone = (value) => !value || /^\d{10}$/.test(String(value).trim());
 const getOrCreateSettings = async () => {
   let settings = await SystemSettings.findOne();
 
@@ -68,6 +70,14 @@ const getSettingsAuditLogs = async (req, res) => {
 
 const updateSettings = async (req, res) => {
   try {
+    if (!isValidPhone(req.body.supportPhone) ||
+        !isValidPhone(req.body.invoice?.supportPhone)) {
+      return res.status(400).json({
+        success: false,
+        message: "Phone number must contain exactly 10 digits",
+      });
+    }
+
     const settings = await getOrCreateSettings();
 
     const allowedFields = [

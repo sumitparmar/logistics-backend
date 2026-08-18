@@ -10,18 +10,34 @@ const reconcileOrders = async () => {
     createdAt: { $gte: since },
   });
 
+  const result = {
+    examined: orders.length,
+    matched: 0,
+    mismatches: 0,
+    resolved: 0,
+    skipped: 0,
+    completedAt: null,
+  };
+
   for (const order of orders) {
-    if (!order.borzoOrderId) continue;
+    if (!order.borzoOrderId) {
+      result.skipped += 1;
+      continue;
+    }
 
     let providerData;
 
     try {
       providerData = await pulseService.getOrder(order.borzoOrderId);
     } catch {
+      result.skipped += 1;
       continue;
     }
 
-    if (!providerData?.is_successful || !providerData.orders?.length) continue;
+    if (!providerData?.is_successful || !providerData.orders?.length) {
+      result.skipped += 1;
+      continue;
+    }
 
     const borzoOrder = providerData.orders[0];
 
@@ -33,7 +49,8 @@ const reconcileOrders = async () => {
 
     const statusMatches = providerStatus?.toUpperCase() === localStatus;
 
-    const amountMatches = providerAmount === expectedAmount;
+    const amountMatches =
+      Math.round(providerAmount * 100) === Math.round(expectedAmount * 100);
 
     // Find existing reconciliation row
     const existing = await Reconciliation.findOne({
@@ -42,6 +59,7 @@ const reconcileOrders = async () => {
     });
 
     if (!statusMatches || !amountMatches) {
+      result.mismatches += 1;
       // create or update mismatch
       if (existing) {
         existing.providerAmount = providerAmount;
@@ -68,8 +86,15 @@ const reconcileOrders = async () => {
       // mismatch resolved
       existing.resolved = true;
       await existing.save();
+      result.resolved += 1;
+      result.matched += 1;
+    } else {
+      result.matched += 1;
     }
   }
+
+  result.completedAt = new Date();
+  return result;
 };
 
 module.exports = {

@@ -1,5 +1,9 @@
 const Joi = require("joi");
 
+const phoneRule = Joi.string().trim().pattern(/^\d{10}$/).messages({
+  "string.pattern.base": "Phone number must contain exactly 10 digits",
+});
+
 /**
  * CALCULATE ORDER
  */
@@ -38,7 +42,7 @@ const calculateOrderSchema = Joi.object({
         lat: Joi.number().optional(),
         lng: Joi.number().optional(),
         name: Joi.string().optional(),
-        phone: Joi.string().optional(),
+        phone: phoneRule.optional(),
         notes: Joi.string().allow("", null).optional(),
       }),
     )
@@ -82,7 +86,7 @@ const createOrderSchema = Joi.object({
   }),
   customer: Joi.object({
     name: Joi.string().required(),
-    phone: Joi.string().optional(),
+    phone: phoneRule.optional(),
   }).required(),
 
   // Backward compatible
@@ -111,7 +115,7 @@ const createOrderSchema = Joi.object({
         unit: Joi.string().optional(),
         instructions: Joi.string().optional(),
         name: Joi.string().optional(),
-        phone: Joi.string().required(),
+        phone: phoneRule.required(),
       }),
     )
     .optional(),

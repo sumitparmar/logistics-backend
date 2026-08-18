@@ -26,7 +26,9 @@ const { getPricingAnalytics } = require("../controllers/analytics.controller");
 const {
   fetchAdminNotifications,
   markAdminNotificationAsRead,
-  createTestNotification,
+  markAllAdminNotificationsAsRead,
+  deleteAdminNotificationById,
+  fetchAdminUnreadCount,
 } = require("../controllers/adminNotification.controller");
 
 const {
@@ -71,6 +73,8 @@ const {
   getOrdersSummary,
   getRevenueSummary,
   getCodOutstanding,
+  getPayments,
+  reconcilePayments,
   getWalletBalances,
   getProviderPerformance,
   getOrders,
@@ -80,6 +84,8 @@ const {
   cancelOrdersBulk,
   cancelOrder,
   getCouriers,
+  getCourierOrders,
+  getCourierTracking,
   assignRoleToUser,
   removeRoleFromUser,
 } = require("../controllers/admin.controller");
@@ -130,6 +136,17 @@ router.get(
   "/analytics/cod-outstanding",
   allowPermissions("payments.read"),
   getCodOutstanding,
+);
+router.get("/payments", allowPermissions("payments.read"), getPayments);
+router.get(
+  "/payments/export",
+  allowPermissions("payments.read"),
+  exportCSV,
+);
+router.post(
+  "/payments/reconcile",
+  allowPermissions("payments.read"),
+  reconcilePayments,
 );
 router.get(
   "/analytics/wallet-balances",
@@ -203,6 +220,16 @@ router.put(
 // =========================
 router.get("/couriers", allowPermissions("drivers.read"), getCouriers);
 router.get(
+  "/couriers/:courierId/orders",
+  allowPermissions("drivers.read"),
+  getCourierOrders,
+);
+router.get(
+  "/orders/:id/tracking",
+  allowPermissions("drivers.read"),
+  getCourierTracking,
+);
+router.get(
   "/driver-onboarding",
   allowPermissions("drivers.read"),
   listDriverOnboardingApplications,
@@ -256,15 +283,25 @@ router.get(
   allowPermissions("notifications.read"),
   fetchAdminNotifications,
 );
+router.get(
+  "/notifications/unread-count",
+  allowPermissions("notifications.read"),
+  fetchAdminUnreadCount,
+);
+router.patch(
+  "/notifications/read-all",
+  allowPermissions("notifications.update"),
+  markAllAdminNotificationsAsRead,
+);
 router.patch(
   "/notifications/:id/read",
   allowPermissions("notifications.update"),
   markAdminNotificationAsRead,
 );
-router.post(
-  "/notifications/test",
-  allowPermissions("notifications.create"),
-  createTestNotification,
+router.delete(
+  "/notifications/:id",
+  allowPermissions("notifications.update"),
+  deleteAdminNotificationById,
 );
 
 // =========================

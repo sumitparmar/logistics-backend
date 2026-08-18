@@ -30,6 +30,15 @@ const orderLimiter = rateLimit({
   },
 });
 
+const publicApplicationLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: {
+    success: false,
+    message: "Too many onboarding applications. Try again later.",
+  },
+});
+
 const invoiceResendLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 3,
@@ -45,5 +54,6 @@ module.exports = {
   otpLimiter,
   authLimiter,
   orderLimiter,
+  publicApplicationLimiter,
   invoiceResendLimiter,
 };
