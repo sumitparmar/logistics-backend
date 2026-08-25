@@ -15,6 +15,7 @@ const startReconciliationJob = require("./jobs/reconciliation.job");
 const startProviderHealthJob = require("./providers/providerHealth.job");
 const startOrderSyncJob = require("./jobs/orderSync.job");
 const startInvoiceRecoveryJob = require("./jobs/invoiceRecovery.job");
+const startReviewInvitationRecoveryJob = require("./jobs/reviewInvitationRecovery.job");
 
 // START SERVER FUNCTION
 const startServer = async () => {
@@ -25,6 +26,7 @@ const startServer = async () => {
   startProviderHealthJob();
   startOrderSyncJob();
   startInvoiceRecoveryJob();
+  startReviewInvitationRecoveryJob();
   require("./jobs/analytics.job");
 
   const server = http.createServer(app);

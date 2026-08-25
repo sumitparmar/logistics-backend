@@ -3,6 +3,8 @@ const { sendSmsSafely } = require("./sms.service");
 const {
   createCustomerNotification,
 } = require("./customerNotification.service");
+const CustomerNotification = require("../models/CustomerNotification");
+const { sendDeliveryFeedbackInvitation } = require("./reviewInvitation.service");
 
 const buildTrackingLink = (order) => {
   const frontendUrl = (
@@ -10,6 +12,30 @@ const buildTrackingLink = (order) => {
   ).replace(/\/+$/, "");
 
   return `${frontendUrl}/app/track?orderId=${order._id}`;
+};
+
+const ensureDeliveredFeedbackPrompt = async (order) => {
+  const userId = order.user || order.customer?._id;
+  if (!userId) return null;
+
+  const existing = await CustomerNotification.exists({
+    user: userId,
+    order: order._id,
+    type: "ORDER_DELIVERED",
+  });
+  if (existing) return null;
+
+  const orderRef = order.borzoOrderId || String(order._id).slice(-8);
+  return createCustomerNotification({
+    user: userId,
+    order: order._id,
+    type: "ORDER_DELIVERED",
+    title: "Order Delivered",
+    message: `Your order #${orderRef} has been delivered. Share your delivery feedback when you are ready.`,
+    actionLabel: "Share feedback",
+    actionUrl: `/app/orders/${order._id}?feedback=1`,
+    meta: { feedbackPrompt: true },
+  });
 };
 
 const notifyOrderCreated = async (order) => {
@@ -47,28 +73,24 @@ const notifyOrderCreated = async (order) => {
 };
 
 const notifyOrderDelivered = async (order) => {
-  if (String(process.env.DELIVERY_SMS_ENABLED || "true") === "false") {
-    return;
-  }
-
   const orderRef = order.borzoOrderId || String(order._id).slice(-8);
   const message = `MoveKart order ${orderRef} has been delivered. Thank you for using MoveKart.`;
+  await ensureDeliveredFeedbackPrompt(order);
 
-  await createCustomerNotification({
-    user: order.customer._id,
-    order: order._id,
-    type: "ORDER_DELIVERED",
-    title: "Order Delivered",
-    message: `Your order #${orderRef} has been delivered successfully.`,
+  sendDeliveryFeedbackInvitation(order).catch((error) => {
+    console.error("DELIVERY FEEDBACK EMAIL ERROR:", error.message);
   });
 
-  await sendSmsSafely(order.customer?.phone, message, {
-    orderId: order._id,
-    event: "ORDER_DELIVERED",
-  });
+  if (String(process.env.DELIVERY_SMS_ENABLED || "true") !== "false") {
+    await sendSmsSafely(order.customer?.phone, message, {
+      orderId: order._id,
+      event: "ORDER_DELIVERED",
+    });
+  }
 };
 
 module.exports = {
   notifyOrderCreated,
   notifyOrderDelivered,
+  ensureDeliveredFeedbackPrompt,
 };

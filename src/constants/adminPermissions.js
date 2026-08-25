@@ -43,4 +43,9 @@ module.exports = {
     READ: "settings.read",
     UPDATE: "settings.update",
   },
+
+  REVIEWS: {
+    READ: "reviews.read",
+    UPDATE: "reviews.update",
+  },
 };
