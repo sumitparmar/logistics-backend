@@ -1,7 +1,7 @@
 const mongoose = require("mongoose");
 const Invoice = require("../models/Invoice");
 const Order = require("../models/Order");
-const { processDeliveredOrder } = require("../services/invoice.service");
+const { processDeliveredOrder, PDF_RENDER_VERSION } = require("../services/invoice.service");
 const { enqueueInvoiceEmail } = require("../services/invoiceEmail.service");
 const sendSuccess = require("../utils/response").sendSuccess;
 const sanitizeInvoiceFilename = require("../utils/invoiceFilename");
@@ -32,12 +32,12 @@ const getOwnedDeliveredOrder = async (orderId, userId) => {
 
 const getOrCreateInvoice = async (order) => {
   let invoice = await Invoice.findOne({ order: order._id });
-  if (!invoice || !invoice.pdf?.checksum) {
+  if (!invoice || !invoice.pdf?.checksum || invoice.pdf.templateVersion !== PDF_RENDER_VERSION) {
     await processDeliveredOrder(order);
     invoice = await Invoice.findOne({ order: order._id });
   }
-  if (!invoice) {
-    const error = new Error("Invoice is being prepared. Please try again shortly");
+  if (!invoice || !invoice.pdf?.checksum || invoice.pdf.templateVersion !== PDF_RENDER_VERSION) {
+    const error = new Error("Invoice is being prepared with the latest template. Please try again shortly");
     error.statusCode = 503;
     throw error;
   }

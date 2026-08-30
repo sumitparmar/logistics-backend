@@ -17,6 +17,11 @@ module.exports = {
     UPDATE: "drivers.update",
   },
 
+  DRIVER_ONBOARDING: {
+    READ: "driver_onboarding.read",
+    UPDATE: "driver_onboarding.update",
+  },
+
   PAYMENTS: {
     READ: "payments.read",
   },

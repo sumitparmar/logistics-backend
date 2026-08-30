@@ -5,6 +5,7 @@ const User = require("../models/User");
 const ReviewInvitation = require("../models/ReviewInvitation");
 const { hashToken } = require("../services/reviewInvitation.service");
 const { createAdminNotification } = require("../services/adminNotification.service");
+const { getOrderReference } = require("../utils/orderReference");
 
 const safeLimit = (value, fallback = 6) =>
   Math.min(Math.max(Number.parseInt(value, 10) || fallback, 1), 12);
@@ -185,7 +186,7 @@ const getReviewInvite = async (req, res, next) => {
       success: true,
       data: {
         orderId: order._id,
-        orderReference: order.borzoOrderId || String(order._id).slice(-8).toUpperCase(),
+        orderReference: getOrderReference(order.borzoOrderId || order._id),
         deliveredAt: order.deliveredAt,
         expiresAt: invitation.expiresAt,
       },

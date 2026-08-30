@@ -9,6 +9,9 @@ const webhookFingerprint = require("../utils/webhookFingerprint");
 const { creditWallet } = require("../services/wallet.service");
 const { emitOrderUpdate } = require("../services/realtime.service");
 const { processDeliveredOrder } = require("../services/invoice.service");
+const { createCustomerNotification } = require("../services/customerNotification.service");
+const { notifyOrderDelivered } = require("../services/deliveryNotification.service");
+const { getOrderReference } = require("../utils/orderReference");
 
 const borzoWebhook = async (req, res) => {
   try {
@@ -66,6 +69,7 @@ const borzoWebhook = async (req, res) => {
       return res.status(200).json({ received: true });
     }
 
+    const previousStatus = order.status;
     order.status = transitionStatus(order.status, mappedStatus);
 
     if (
@@ -83,11 +87,33 @@ const borzoWebhook = async (req, res) => {
 
     //  Save raw provider response
     order.rawProviderResponse = payload;
+    order.providerSync = {
+      ...(order.providerSync?.toObject?.() || order.providerSync || {}),
+      lastAttemptAt: new Date(),
+      lastSuccessAt: new Date(),
+      consecutiveFailures: 0,
+      lastError: undefined,
+    };
 
     const savedOrder = await order.save();
 
     if (savedOrder.status === "DELIVERED") {
       await processDeliveredOrder(savedOrder);
+    }
+
+    if (previousStatus !== savedOrder.status && savedOrder.user) {
+      await createCustomerNotification({
+        user: savedOrder.user,
+        order: savedOrder._id,
+        type: savedOrder.status === "DELIVERED" ? "ORDER_DELIVERED" : "ORDER_STATUS",
+        title: savedOrder.status === "DELIVERED" ? "Order Delivered" : "Order Update",
+        message: `Your order #${getOrderReference(savedOrder.borzoOrderId)} is now ${String(savedOrder.status).replace(/_/g, " ").toLowerCase()}.`,
+        priority: savedOrder.status === "CANCELLED" ? "HIGH" : "MEDIUM",
+      });
+    }
+
+    if (savedOrder.status === "DELIVERED") {
+      await notifyOrderDelivered(savedOrder);
     }
 
     emitOrderUpdate(savedOrder.user, savedOrder, { admin: true });
@@ -149,6 +175,7 @@ const borzoDeliveryWebhook = async (req, res) => {
     if (!mappedStatus) {
       return res.status(200).json({ received: true });
     }
+    const previousStatus = order.status;
     order.status = transitionStatus(order.status, mappedStatus);
 
     const isFirstDelivery = mappedStatus === "DELIVERED" && !order.deliveredAt;
@@ -200,6 +227,21 @@ const borzoDeliveryWebhook = async (req, res) => {
 
     if (savedOrder.status === "DELIVERED") {
       await processDeliveredOrder(savedOrder);
+    }
+
+    if (previousStatus !== savedOrder.status && savedOrder.user) {
+      await createCustomerNotification({
+        user: savedOrder.user,
+        order: savedOrder._id,
+        type: savedOrder.status === "DELIVERED" ? "ORDER_DELIVERED" : "ORDER_STATUS",
+        title: savedOrder.status === "DELIVERED" ? "Order Delivered" : "Order Update",
+        message: `Your order #${getOrderReference(savedOrder.borzoOrderId)} is now ${String(savedOrder.status).replace(/_/g, " ").toLowerCase()}.`,
+        priority: savedOrder.status === "CANCELLED" ? "HIGH" : "MEDIUM",
+      });
+    }
+
+    if (savedOrder.status === "DELIVERED") {
+      await notifyOrderDelivered(savedOrder);
     }
 
     emitOrderUpdate(savedOrder.user, savedOrder, { admin: true });

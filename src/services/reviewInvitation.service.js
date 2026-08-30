@@ -3,6 +3,7 @@ const ReviewInvitation = require("../models/ReviewInvitation");
 const CustomerReview = require("../models/CustomerReview");
 const User = require("../models/User");
 const sendEmail = require("../utils/sendEmail");
+const { getOrderReference } = require("../utils/orderReference");
 
 const hashToken = (token) => crypto.createHash("sha256").update(token).digest("hex");
 const escapeHtml = (value) => String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
@@ -55,7 +56,7 @@ const sendDeliveryFeedbackInvitation = async (order) => {
   ).select("+tokenHash");
   if (!claim) return ReviewInvitation.findById(invitation._id).select("+tokenHash");
 
-  const orderRef = order.borzoOrderId || String(order._id).slice(-8).toUpperCase();
+  const orderRef = getOrderReference(order.borzoOrderId || order._id);
   // Generate the raw token only for this email; the database stores its hash.
   const rawToken = crypto.randomBytes(32).toString("hex");
   const tokenUpdated = await ReviewInvitation.findOneAndUpdate(

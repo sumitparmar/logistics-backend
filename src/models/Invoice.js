@@ -187,6 +187,7 @@ const invoiceSchema = new mongoose.Schema(
       checksum: { type: String, trim: true },
       size: { type: Number, min: 0 },
       generatedAt: { type: Date },
+      templateVersion: { type: String, trim: true },
     },
 
     email: {

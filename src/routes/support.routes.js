@@ -10,9 +10,10 @@ const {
 } = require("../controllers/adminSupport.controller");
 
 const protect = require("../middlewares/auth.middleware");
+const optionalProtect = protect.optionalProtect;
 
 // Backward-compatible public alias for existing contact/support form submissions.
-router.post("/create", createSupportTicket);
+router.post("/create", optionalProtect, createSupportTicket);
 
 router.use(protect);
 

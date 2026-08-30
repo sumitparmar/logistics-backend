@@ -3,6 +3,10 @@ const PublicDriverOnboarding = require("../models/PublicDriverOnboarding");
 const SystemSettings = require("../models/SystemSettings");
 const { getVehicleTypes } = require("./providerCatalog.service");
 const { getIO } = require("../config/socket");
+const {
+  createCustomerNotification,
+} = require("./customerNotification.service");
+const { createAdminNotification } = require("./adminNotification.service");
 
 const DEFAULT_DRIVER_ONBOARDING = {
   serviceAreaCountry: "in",
@@ -177,6 +181,15 @@ const submitPublicDriverOnboarding = async (payload) => {
     ...application.toObject(),
     source: "PUBLIC",
   });
+  createAdminNotification({
+    type: "DRIVER",
+    title: "New driver onboarding application",
+    message: `${data.personal.fullName || "A driver applicant"} submitted an application.`,
+    priority: "MEDIUM",
+    meta: { userId: null },
+  }).catch((notificationError) => {
+    console.error("Driver onboarding admin notification failed:", notificationError.message);
+  });
   return application;
 };
 
@@ -215,6 +228,26 @@ const saveMyDriverOnboarding = async ({ userId, payload, submit = false }) => {
   );
 
   emitDriverOnboardingUpdate(application);
+
+  if (submit && application.user) {
+    const statusLabel = String(application.status).replace(/_/g, " ").toLowerCase();
+    createCustomerNotification({
+      user: application.user,
+      type: "DRIVER_ONBOARDING",
+      title: "Driver onboarding updated",
+      message: `Your driver onboarding application is now ${statusLabel}.`,
+      priority: application.status === "REJECTED" ? "HIGH" : "MEDIUM",
+      actionLabel: "View application",
+      actionUrl: "/app/driver-onboarding",
+      meta: { onboardingStatus: application.status },
+    }).catch((notificationError) => {
+      console.error(
+        "Driver onboarding notification failed:",
+        notificationError.message,
+      );
+    });
+  }
+
   return application;
 };
 
@@ -307,6 +340,22 @@ const updateDriverOnboardingStatus = async ({
   }
 
   emitDriverOnboardingUpdate(application);
+
+  if (source !== "PUBLIC" && application.user) {
+    const statusLabel = String(application.status).replace(/_/g, " ").toLowerCase();
+    createCustomerNotification({
+      user: application.user,
+      type: "DRIVER_ONBOARDING",
+      title: "Driver onboarding updated",
+      message: `Your driver onboarding application is now ${statusLabel}.`,
+      priority: application.status === "REJECTED" ? "HIGH" : "MEDIUM",
+      actionLabel: "View application",
+      actionUrl: "/app/driver-onboarding",
+      meta: { onboardingStatus: application.status },
+    }).catch((notificationError) => {
+      console.error("Driver onboarding notification failed:", notificationError.message);
+    });
+  }
   return application;
 };
 

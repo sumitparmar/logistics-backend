@@ -8,8 +8,10 @@ const SystemSettings = require("../models/SystemSettings");
 const { allocateInvoiceNumber } = require("../utils/invoiceNumber");
 const amountInWords = require("../utils/amountInWords");
 const sanitizeInvoiceFilename = require("../utils/invoiceFilename");
+const { getOrderReference } = require("../utils/orderReference");
 
 const TEMPLATE_VERSION = "1.0";
+const PDF_RENDER_VERSION = "2.0";
 const roundMoney = (value) => Number(Number(value || 0).toFixed(2));
 const isNonZero = (value) => Math.abs(Number(value || 0)) >= 0.01;
 
@@ -269,7 +271,7 @@ const buildInvoiceSnapshot = async (order, user, business) => {
     order.vehicleTypeId || order.vehicle?.type || providerOrder?.vehicle_type_id || null;
 
   const deliverySnapshot = {
-    orderReference: order.borzoOrderId || String(order._id),
+    orderReference: getOrderReference(order.borzoOrderId || order._id),
     internalOrderReference: String(order._id),
     bookingDate: order.createdAt,
     deliveredDate: order.deliveredAt,
@@ -297,7 +299,9 @@ const buildInvoiceSnapshot = async (order, user, business) => {
       supportEmail: business.supportEmail || null,
       supportPhone: business.supportPhone || null,
       currency: business.currency,
-      invoiceTitle: business.gstin ? "Tax Invoice" : "Invoice",
+      invoiceTitle: business.gstin
+        ? "Tax Invoice/ Consignment Note"
+        : "Bill of Supply/ Consignment Note",
       logoAsset: business.logoAsset,
       logoChecksum: business.logoChecksum,
     },
@@ -464,7 +468,7 @@ const ensureInvoiceForDeliveredOrder = async (order) => {
     invoice = await upgradeLegacyInvoiceSnapshot(invoice, order);
   }
 
-  if (!invoice.pdf?.data) {
+  if (!invoice.pdf?.data || invoice.pdf.templateVersion !== PDF_RENDER_VERSION) {
     const generateInvoicePdf = require("../utils/generateInvoicePdf");
     const pdfBuffer = await generateInvoicePdf(invoice);
     const checksum = crypto.createHash("sha256").update(pdfBuffer).digest("hex");
@@ -479,6 +483,7 @@ const ensureInvoiceForDeliveredOrder = async (order) => {
             checksum,
             size: pdfBuffer.length,
             generatedAt: new Date(),
+            templateVersion: PDF_RENDER_VERSION,
           },
         },
       },
@@ -509,4 +514,5 @@ module.exports = {
   ensureInvoiceForDeliveredOrder,
   processDeliveredOrder,
   getInvoiceBusinessConfig,
+  PDF_RENDER_VERSION,
 };

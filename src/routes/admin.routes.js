@@ -12,6 +12,7 @@ const protect = require("../middlewares/auth.middleware");
 const {
   allowRoles,
   allowPermissions,
+  allowAnyPermissions,
 } = require("../middlewares/role.middleware");
 
 const PERMISSIONS = require("../constants/adminPermissions");
@@ -45,6 +46,7 @@ const {
   getSupportTicketById,
   replyToSupportTicket,
   updateSupportTicketStatus,
+  updateSupportTicketPriority,
   createSupportTicket,
   getSupportTicketCounts,
 } = require("../controllers/adminSupport.controller");
@@ -231,7 +233,10 @@ router.get(
 );
 router.get(
   "/driver-onboarding",
-  allowPermissions("drivers.read"),
+  allowAnyPermissions(
+    PERMISSIONS.DRIVER_ONBOARDING.READ,
+    PERMISSIONS.DRIVERS.READ,
+  ),
   listDriverOnboardingApplications,
 );
 
@@ -255,7 +260,10 @@ router.post(
 );
 router.put(
   "/driver-onboarding/:id/status",
-  allowPermissions("drivers.update"),
+  allowAnyPermissions(
+    PERMISSIONS.DRIVER_ONBOARDING.UPDATE,
+    PERMISSIONS.DRIVERS.UPDATE,
+  ),
   updateDriverOnboardingStatus,
 );
 
@@ -331,6 +339,11 @@ router.patch(
   "/support/tickets/:id/status",
   allowPermissions("support.update"),
   updateSupportTicketStatus,
+);
+router.patch(
+  "/support/tickets/:id/priority",
+  allowPermissions("support.update"),
+  updateSupportTicketPriority,
 );
 router.post(
   "/support/tickets",

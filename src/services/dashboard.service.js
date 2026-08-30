@@ -1,5 +1,6 @@
 const Order = require("../models/Order");
 const Wallet = require("../models/Wallet");
+const { getOrderReference } = require("../utils/orderReference");
 
 const getDashboardSummaryService = async (userId) => {
   const [
@@ -119,6 +120,7 @@ const getDashboardSummaryService = async (userId) => {
     recentOrders: recentOrdersDocs.map((o) => ({
       id: o._id,
       borzoOrderId: o.borzoOrderId,
+      displayOrderId: getOrderReference(o.borzoOrderId || o._id),
       pickup: o.pickup?.address || "N/A",
       drop: o.drop?.address || "N/A",
       status: o.status || "CREATED",

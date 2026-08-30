@@ -3,6 +3,11 @@ const mongoose = require("mongoose");
 const User = require("../models/User");
 const { getIO } = require("../config/socket");
 const { createAdminNotification } = require("../services/adminNotification.service");
+const {
+  createCustomerNotification,
+} = require("../services/customerNotification.service");
+
+const isAdminUser = (req) => req.user?.role === "admin";
 // GET SUPPORT TICKETS
 
 const escapeRegex = (text) => {
@@ -19,7 +24,7 @@ const getSupportTickets = async (req, res) => {
 
     const query = {};
 
-    if (req.user.role !== "admin") {
+    if (!isAdminUser(req)) {
       query.user = req.user._id;
     }
 
@@ -94,7 +99,7 @@ const AdminSupportMessage = require("../models/AdminSupportMessage");
 
 // GET SINGLE TICKET
 const canAccessTicket = (req, ticket) => {
-  if (req.user?.role === "admin") return true;
+  if (isAdminUser(req)) return true;
   return (
     ticket.user &&
     String(ticket.user._id || ticket.user) === String(req.user?._id)
@@ -213,6 +218,22 @@ const replyToSupportTicket = async (req, res) => {
         ...updatedTicket,
         messages,
       });
+
+      createCustomerNotification({
+        user: updatedTicket.user._id,
+        ticketId: updatedTicket._id,
+        type: "SUPPORT_REPLY",
+        title: "Support replied to your ticket",
+        message: `MoveKart Support replied to “${updatedTicket.subject}”.`,
+        priority: "HIGH",
+        actionLabel: "Open support",
+        actionUrl: "/app/support",
+      }).catch((notificationError) => {
+        console.error(
+          "Support reply notification failed:",
+          notificationError.message,
+        );
+      });
     }
 
     // update ADMIN panels also
@@ -294,6 +315,19 @@ const replyToSupportTicketAsUser = async (req, res) => {
       .lean();
 
     const io = getIO();
+    createAdminNotification({
+      type: "SUPPORT",
+      title: "Customer replied to a support ticket",
+      message: ticket.subject,
+      isRead: false,
+      priority: ticket.priority === "high" ? "HIGH" : "MEDIUM",
+      ticketId: ticket._id,
+    }).catch((notificationError) => {
+      console.error(
+        "Support reply admin notification failed:",
+        notificationError.message,
+      );
+    });
     io.to("admin").emit("ticket_updated", {
       ...updatedTicket,
       messages,
@@ -375,6 +409,24 @@ const updateSupportTicketStatus = async (req, res) => {
         ...updatedTicket,
         messages,
       });
+
+      createCustomerNotification({
+        user: updatedTicket.user._id,
+        ticketId: updatedTicket._id,
+        type: "SUPPORT_STATUS",
+        title: "Support ticket updated",
+        message: `Your ticket “${updatedTicket.subject}” is now ${status
+          .replace(/_/g, " ")
+          .toLowerCase()}.`,
+        priority: "MEDIUM",
+        actionLabel: "Open support",
+        actionUrl: "/app/support",
+      }).catch((notificationError) => {
+        console.error(
+          "Support status notification failed:",
+          notificationError.message,
+        );
+      });
     }
 
     return res.json({
@@ -390,10 +442,62 @@ const updateSupportTicketStatus = async (req, res) => {
   }
 };
 
+const updateSupportTicketPriority = async (req, res) => {
+  try {
+    const priority = String(req.body?.priority || '').toLowerCase();
+    if (!['low', 'medium', 'high'].includes(priority)) {
+      return res.status(400).json({ success: false, message: 'Invalid ticket priority' });
+    }
+
+    const ticket = await AdminSupportTicket.findById(req.params.id);
+    if (!ticket) {
+      return res.status(404).json({ success: false, message: 'Ticket not found' });
+    }
+
+    ticket.priority = priority;
+    await ticket.save();
+
+    const updatedTicket = await AdminSupportTicket.findById(ticket._id)
+      .populate('user', 'name email phone')
+      .lean();
+    const messages = await AdminSupportMessage.find({ ticket: ticket._id })
+      .sort({ createdAt: 1 })
+      .lean();
+    const io = getIO();
+    io.to('admin').emit('ticket_updated', { ...updatedTicket, messages });
+
+    if (updatedTicket.user?._id) {
+      io.to(`user:${updatedTicket.user._id}`).emit('ticket_updated', {
+        ...updatedTicket,
+        messages,
+      });
+      createCustomerNotification({
+        user: updatedTicket.user._id,
+        ticketId: updatedTicket._id,
+        type: 'SUPPORT_PRIORITY',
+        title: 'Support ticket priority updated',
+        message: `Your ticket “${updatedTicket.subject}” is now ${priority} priority.`,
+        priority: 'MEDIUM',
+        actionLabel: 'Open support',
+        actionUrl: '/app/support',
+      }).catch((notificationError) => {
+        console.error('Support priority notification failed:', notificationError.message);
+      });
+    }
+
+    return res.json({ success: true, data: updatedTicket });
+  } catch (error) {
+    console.error('updateSupportTicketPriority error:', error);
+    return res.status(500).json({ success: false, message: 'Priority update failed' });
+  }
+};
+
 const createSupportTicket = async (req, res) => {
   try {
     const { subject, priority = "medium" } = req.body;
-    const userId = req.user?._id || req.body.userId;
+    // Never trust a client-supplied userId. Anonymous contact submissions stay
+    // unowned; authenticated tickets always belong to the authenticated user.
+    const userId = req.user?._id || null;
 
     //  REQUIRED FIELD CHECK
     if (!subject || !req.body.message?.trim()) {
@@ -433,6 +537,13 @@ const createSupportTicket = async (req, res) => {
       });
     }
 
+    if (!["low", "medium", "high"].includes(String(priority).toLowerCase())) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid ticket priority",
+      });
+    }
+
     const ticket = await AdminSupportTicket.create({
       user: userId || null,
       name: userExists?.name || name,
@@ -443,7 +554,7 @@ const createSupportTicket = async (req, res) => {
         : null,
       subject,
       category: req.body.category || "OTHER",
-      priority,
+      priority: String(priority).toLowerCase(),
       status: "OPEN",
       unreadForAdmin: 1,
       unreadForUser: 0,
@@ -576,6 +687,7 @@ module.exports = {
   replyToSupportTicket,
   replyToSupportTicketAsUser,
   updateSupportTicketStatus,
+  updateSupportTicketPriority,
   createSupportTicket,
   markSupportTicketReadForUser,
   getSupportTicketCounts,

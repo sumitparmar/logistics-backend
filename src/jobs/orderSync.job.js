@@ -19,15 +19,27 @@ const startOrderSyncJob = () => {
       }).limit(50);
 
       for (const order of orders) {
-        const response = await pulseService.getOrder(order.borzoOrderId);
+        try {
+          const attemptAt = new Date();
+          const response = await pulseService.getOrder(order.borzoOrderId);
 
-        if (
-          !response?.is_successful ||
-          !response.orders ||
-          response.orders.length === 0
-        ) {
-          continue;
-        }
+          if (
+            !response?.is_successful ||
+            !response.orders ||
+            response.orders.length === 0
+          ) {
+            await Order.updateOne(
+              { _id: order._id },
+              {
+                $set: {
+                  "providerSync.lastAttemptAt": attemptAt,
+                  "providerSync.lastError": "Provider returned no order data",
+                },
+                $inc: { "providerSync.consecutiveFailures": 1 },
+              },
+            );
+            continue;
+          }
 
         const borzoOrder = response.orders[0];
 
@@ -83,6 +95,21 @@ const startOrderSyncJob = () => {
 
           const savedOrder = await order.save();
 
+          // A successful provider response resets the operational retry
+          // counter. The lifecycle status above is changed only from an
+          // explicit Borzo status and never from a communication failure.
+          await Order.updateOne(
+            { _id: savedOrder._id },
+            {
+              $set: {
+                "providerSync.lastAttemptAt": attemptAt,
+                "providerSync.lastSuccessAt": new Date(),
+                "providerSync.consecutiveFailures": 0,
+              },
+              $unset: { "providerSync.lastError": 1 },
+            },
+          );
+
           if (nextStatus === "DELIVERED") {
             try {
               await processDeliveredOrder(savedOrder);
@@ -93,6 +120,36 @@ const startOrderSyncJob = () => {
           }
 
           emitOrderUpdate(savedOrder.user, savedOrder, { admin: true });
+        } else {
+          await Order.updateOne(
+            { _id: order._id },
+            {
+              $set: {
+                "providerSync.lastAttemptAt": attemptAt,
+                "providerSync.lastSuccessAt": new Date(),
+                "providerSync.consecutiveFailures": 0,
+              },
+              $unset: { "providerSync.lastError": 1 },
+            },
+          );
+        }
+        } catch (orderError) {
+          // A timeout, transient Borzo error or empty response must leave the
+          // local order in its current state for the next reconciliation pass.
+          await Order.updateOne(
+            { _id: order._id },
+            {
+              $set: {
+                "providerSync.lastAttemptAt": new Date(),
+                "providerSync.lastError": String(
+                  orderError?.message || "Provider synchronization failed",
+                ).slice(0, 500),
+              },
+              $inc: { "providerSync.consecutiveFailures": 1 },
+            },
+          ).catch((metadataError) => {
+            console.error("ORDER SYNC METADATA ERROR:", metadataError.message);
+          });
         }
       }
     } catch (err) {

@@ -26,6 +26,8 @@ const { processDeliveredOrder } = require("./invoice.service");
 const {
   createCustomerNotification,
 } = require("./customerNotification.service");
+const { createAdminNotification } = require("./adminNotification.service");
+const { getOrderReference } = require("../utils/orderReference");
 const mongoose = require("mongoose");
 
 const { debitWallet, creditWallet, getWallet } = require("./wallet.service");
@@ -559,9 +561,18 @@ const getOrderByIdService = async (id, userId = null) => {
 };
 
 const getPublicTrackingOrderService = async (id) => {
-  const query = mongoose.Types.ObjectId.isValid(id)
-    ? { $or: [{ _id: id }, { borzoOrderId: String(id) }] }
-    : { borzoOrderId: String(id) };
+  const value = String(id || '').trim();
+  const numericReference = /^\d{1,6}$/.test(value)
+    ? value.replace(/^0+/, '') || '0'
+    : null;
+  const referencePattern = numericReference
+    ? new RegExp(`0*${numericReference.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`)
+    : null;
+  const query = mongoose.Types.ObjectId.isValid(value)
+    ? { $or: [{ _id: value }, { borzoOrderId: value }] }
+    : referencePattern
+      ? { borzoOrderId: referencePattern }
+      : { borzoOrderId: value };
   const order = await Order.findOne(query);
 
   if (!order) {
@@ -730,6 +741,22 @@ const cancelOrderService = async (id, userId) => {
 
   const savedOrder = await order.save();
 
+  createCustomerNotification({
+    user: savedOrder.user,
+    order: savedOrder._id,
+    type: "ORDER_CANCELLED",
+    title: "Order cancelled",
+    message: `Order #${getOrderReference(savedOrder.borzoOrderId || savedOrder._id)} has been cancelled.`,
+    priority: "HIGH",
+    actionLabel: "View order",
+    actionUrl: `/app/orders/${savedOrder._id}`,
+  }).catch((notificationError) => {
+    console.error(
+      "Order cancellation notification failed:",
+      notificationError.message,
+    );
+  });
+
   emitOrderUpdate(savedOrder.user, savedOrder);
 
   return savedOrder;
@@ -742,13 +769,39 @@ const syncOrderService = async (id, userId) => {
     ? await Order.findOne({ _id: id, user: userId })
     : await Order.findById(id);
   if (!order) throw new Error("Order not found");
-  const response = await pulseService.getOrder(order.borzoOrderId);
+  const attemptAt = new Date();
+  let response;
+  try {
+    response = await pulseService.getOrder(order.borzoOrderId);
+  } catch (error) {
+    await Order.updateOne(
+      { _id: order._id },
+      {
+        $set: {
+          'providerSync.lastAttemptAt': attemptAt,
+          'providerSync.lastError': String(error?.message || 'Provider synchronization failed').slice(0, 500),
+        },
+        $inc: { 'providerSync.consecutiveFailures': 1 },
+      },
+    );
+    throw error;
+  }
 
   if (
     !response?.is_successful ||
     !response.orders ||
     response.orders.length === 0
   ) {
+    await Order.updateOne(
+      { _id: order._id },
+      {
+        $set: {
+          'providerSync.lastAttemptAt': attemptAt,
+          'providerSync.lastError': 'Provider returned no order data',
+        },
+        $inc: { 'providerSync.consecutiveFailures': 1 },
+      },
+    );
     throw new Error("Invalid delivery synchronization response");
   }
 
@@ -847,21 +900,40 @@ const syncOrderService = async (id, userId) => {
 
   const savedOrder = await order.save();
 
+  await Order.updateOne(
+    { _id: savedOrder._id },
+    {
+      $set: {
+        'providerSync.lastAttemptAt': attemptAt,
+        'providerSync.lastSuccessAt': new Date(),
+        'providerSync.consecutiveFailures': 0,
+      },
+      $unset: { 'providerSync.lastError': 1 },
+    },
+  );
+
   if (savedOrder.status === "DELIVERED") {
     await processDeliveredOrder(savedOrder);
   }
 
-  if (previousStatus !== mappedStatus) {
+  if (mappedStatus && previousStatus !== mappedStatus) {
     try {
       await createCustomerNotification({
         user: order.user,
         order: order._id,
         type: "ORDER_STATUS",
         title: "Order Update",
-        message: `Your order #${order.borzoOrderId} is now ${mappedStatus.replace(
+        message: `Your order #${getOrderReference(order.borzoOrderId || order._id)} is now ${mappedStatus.replace(
           /_/g,
           " ",
         )}`,
+      });
+      await createAdminNotification({
+        type: "ORDER",
+        title: "Order status updated",
+        message: `Order #${getOrderReference(order.borzoOrderId || order._id)} is now ${mappedStatus.replace(/_/g, " ").toLowerCase()}.`,
+        priority: mappedStatus === "CANCELLED" ? "HIGH" : "MEDIUM",
+        meta: { orderId: order._id, userId: order.user },
       });
     } catch (err) {
       console.error("Notification creation failed:", err.message);

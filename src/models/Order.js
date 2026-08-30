@@ -222,6 +222,15 @@ const orderSchema = new mongoose.Schema(
       required: true,
     },
 
+    // Sync health is operational metadata; it must never be used as a
+    // customer-facing order status or as an implicit cancellation trigger.
+    providerSync: {
+      lastAttemptAt: Date,
+      lastSuccessAt: Date,
+      consecutiveFailures: { type: Number, default: 0 },
+      lastError: String,
+    },
+
     pricingSnapshot: {
       basePrice: Number,
 

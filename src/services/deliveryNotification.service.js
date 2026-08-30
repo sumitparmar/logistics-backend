@@ -3,8 +3,10 @@ const { sendSmsSafely } = require("./sms.service");
 const {
   createCustomerNotification,
 } = require("./customerNotification.service");
+const { createAdminNotification } = require("./adminNotification.service");
 const CustomerNotification = require("../models/CustomerNotification");
 const { sendDeliveryFeedbackInvitation } = require("./reviewInvitation.service");
+const { getOrderReference } = require("../utils/orderReference");
 
 const buildTrackingLink = (order) => {
   const frontendUrl = (
@@ -25,7 +27,7 @@ const ensureDeliveredFeedbackPrompt = async (order) => {
   });
   if (existing) return null;
 
-  const orderRef = order.borzoOrderId || String(order._id).slice(-8);
+  const orderRef = getOrderReference(order.borzoOrderId || order._id);
   return createCustomerNotification({
     user: userId,
     order: order._id,
@@ -39,41 +41,49 @@ const ensureDeliveredFeedbackPrompt = async (order) => {
 };
 
 const notifyOrderCreated = async (order) => {
-  if (String(process.env.DELIVERY_SMS_ENABLED || "true") === "false") {
-    return;
-  }
-
   const trackingLink = buildTrackingLink(order);
-  const orderRef = order.borzoOrderId || String(order._id).slice(-8);
+  const orderRef = getOrderReference(order.borzoOrderId || order._id);
 
   const message = `MoveKart order ${orderRef} is created. Track here: ${trackingLink}`;
 
   await createCustomerNotification({
-    user: order.customer._id,
+    user: order.user || order.customer?._id,
     order: order._id,
     type: "ORDER_CREATED",
     title: "Order Created",
     message: `Your order #${orderRef} has been created successfully.`,
   });
 
-  await Promise.all([
-    sendSmsSafely(order.customer?.phone, message, {
-      orderId: order._id,
-      event: "ORDER_CREATED",
-    }),
-    ...(order.stops || [])
-      .filter((stop) => stop.type === "DROP" && stop.phone)
-      .map((stop) =>
-        sendSmsSafely(stop.phone, message, {
-          orderId: order._id,
-          event: "ORDER_CREATED_RECIPIENT",
-        }),
-      ),
-  ]);
+  createAdminNotification({
+    type: "ORDER",
+    title: "New order created",
+    message: `Order #${orderRef} was created successfully.`,
+    priority: "MEDIUM",
+    meta: { orderId: order._id, userId: order.user || null },
+  }).catch((notificationError) => {
+    console.error("Order creation admin notification failed:", notificationError.message);
+  });
+
+  if (String(process.env.DELIVERY_SMS_ENABLED || "true") !== "false") {
+    await Promise.all([
+      sendSmsSafely(order.customer?.phone, message, {
+        orderId: order._id,
+        event: "ORDER_CREATED",
+      }),
+      ...(order.stops || [])
+        .filter((stop) => stop.type === "DROP" && stop.phone)
+        .map((stop) =>
+          sendSmsSafely(stop.phone, message, {
+            orderId: order._id,
+            event: "ORDER_CREATED_RECIPIENT",
+          }),
+        ),
+    ]);
+  }
 };
 
 const notifyOrderDelivered = async (order) => {
-  const orderRef = order.borzoOrderId || String(order._id).slice(-8);
+  const orderRef = getOrderReference(order.borzoOrderId || order._id);
   const message = `MoveKart order ${orderRef} has been delivered. Thank you for using MoveKart.`;
   await ensureDeliveredFeedbackPrompt(order);
 

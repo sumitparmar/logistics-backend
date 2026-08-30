@@ -20,6 +20,8 @@ const {
 const { emitOrderUpdate } = require("../services/realtime.service");
 const { getTrackingService } = require("../services/orders.service");
 const { reconcileOrders } = require("../services/reconciliation.service");
+const { createCustomerNotification } = require("../services/customerNotification.service");
+const { getOrderReference } = require("../utils/orderReference");
 
 const getProviderHealth = async (req, res) => {
   return res.json({
@@ -1245,6 +1247,7 @@ const updateOrderStatus = async (req, res) => {
       });
     }
 
+    const previousStatus = order.status;
     order.status = nextStatus;
     if (status === "ASSIGNED") order.assignedAt = new Date();
     if (status === "PICKED_UP") order.pickedAt = new Date();
@@ -1269,6 +1272,17 @@ const updateOrderStatus = async (req, res) => {
 
     if (savedOrder.status === "DELIVERED") {
       await processDeliveredOrder(savedOrder);
+    }
+
+    if (previousStatus !== savedOrder.status && savedOrder.user) {
+      await createCustomerNotification({
+        user: savedOrder.user,
+        order: savedOrder._id,
+        type: savedOrder.status === "DELIVERED" ? "ORDER_DELIVERED" : "ORDER_STATUS",
+        title: savedOrder.status === "DELIVERED" ? "Order Delivered" : "Order Update",
+        message: `Your order #${getOrderReference(savedOrder.borzoOrderId)} is now ${String(savedOrder.status).replace(/_/g, " ").toLowerCase()}.`,
+        priority: savedOrder.status === "CANCELLED" ? "HIGH" : "MEDIUM",
+      });
     }
 
     emitOrderUpdate(savedOrder.user, savedOrder, { admin: true });
@@ -1313,6 +1327,17 @@ const cancelOrder = async (req, res) => {
     order.cancelledAt = new Date();
 
     const savedOrder = await order.save();
+
+    if (savedOrder.user) {
+      await createCustomerNotification({
+        user: savedOrder.user,
+        order: savedOrder._id,
+        type: "ORDER_CANCELLED",
+        title: "Order Cancelled",
+        message: `Your order #${getOrderReference(savedOrder.borzoOrderId)} has been cancelled by support.`,
+        priority: "HIGH",
+      });
+    }
 
     emitOrderUpdate(savedOrder.user, savedOrder, { admin: true });
 
