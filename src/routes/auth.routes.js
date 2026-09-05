@@ -40,5 +40,6 @@ router.post("/forgot-password", authLimiter, authController.forgotPassword);
 router.post("/reset-password", authController.resetPassword);
 router.get("/me", protect, authController.getProfile);
 router.put("/profile", protect, authController.updateProfile);
+router.put("/profile-photo", protect, authController.updateProfilePhoto);
 router.post("/change-password", protect, authController.changePassword);
 module.exports = router;

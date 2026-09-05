@@ -10,8 +10,26 @@ const {
 const isAdminUser = (req) => req.user?.role === "admin";
 // GET SUPPORT TICKETS
 
+const allowedCategories = [
+  "ORDER_ISSUE",
+  "PAYMENT",
+  "REFUND",
+  "ACCOUNT",
+  "TECHNICAL",
+  "SAFETY",
+  "OTHER",
+];
+
 const escapeRegex = (text) => {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+};
+
+const emitSocketEvent = (room, event, payload) => {
+  try {
+    getIO().to(room).emit(event, payload);
+  } catch (error) {
+    console.error("Support socket emit failed:", error.message);
+  }
 };
 
 const getSupportTickets = async (req, res) => {
@@ -108,6 +126,13 @@ const canAccessTicket = (req, ticket) => {
 
 const getSupportTicketById = async (req, res) => {
   try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid ticket ID",
+      });
+    }
+
     const ticket = await AdminSupportTicket.findById(req.params.id)
       .populate({
         path: "user",
@@ -199,8 +224,6 @@ const replyToSupportTicket = async (req, res) => {
 
     await ticketExists.save();
 
-    const io = getIO();
-
     // get full updated ticket with messages
     const updatedTicket = await AdminSupportTicket.findById(req.params.id)
       .populate("user", "name email phone")
@@ -214,7 +237,7 @@ const replyToSupportTicket = async (req, res) => {
 
     // send to USER
     if (updatedTicket.user?._id) {
-      io.to(`user:${updatedTicket.user._id}`).emit("ticket_reply", {
+      emitSocketEvent(`user:${updatedTicket.user._id}`, "ticket_reply", {
         ...updatedTicket,
         messages,
       });
@@ -237,7 +260,7 @@ const replyToSupportTicket = async (req, res) => {
     }
 
     // update ADMIN panels also
-    io.to("admin").emit("ticket_updated", {
+    emitSocketEvent("admin", "ticket_updated", {
       ...updatedTicket,
       messages,
     });
@@ -314,7 +337,6 @@ const replyToSupportTicketAsUser = async (req, res) => {
       .sort({ createdAt: 1 })
       .lean();
 
-    const io = getIO();
     createAdminNotification({
       type: "SUPPORT",
       title: "Customer replied to a support ticket",
@@ -328,7 +350,7 @@ const replyToSupportTicketAsUser = async (req, res) => {
         notificationError.message,
       );
     });
-    io.to("admin").emit("ticket_updated", {
+    emitSocketEvent("admin", "ticket_updated", {
       ...updatedTicket,
       messages,
     });
@@ -387,8 +409,6 @@ const updateSupportTicketStatus = async (req, res) => {
     if (status === "CLOSED") ticket.closedAt = new Date();
     await ticket.save();
 
-    const io = getIO();
-
     const updatedTicket = await AdminSupportTicket.findById(req.params.id)
       .populate("user", "name email phone")
       .lean();
@@ -399,13 +419,13 @@ const updateSupportTicketStatus = async (req, res) => {
       .sort({ createdAt: 1 })
       .lean();
 
-    io.to("admin").emit("ticket_updated", {
+    emitSocketEvent("admin", "ticket_updated", {
       ...updatedTicket,
       messages,
     });
 
     if (updatedTicket.user?._id) {
-      io.to(`user:${updatedTicket.user._id}`).emit("ticket_updated", {
+      emitSocketEvent(`user:${updatedTicket.user._id}`, "ticket_updated", {
         ...updatedTicket,
         messages,
       });
@@ -463,11 +483,10 @@ const updateSupportTicketPriority = async (req, res) => {
     const messages = await AdminSupportMessage.find({ ticket: ticket._id })
       .sort({ createdAt: 1 })
       .lean();
-    const io = getIO();
-    io.to('admin').emit('ticket_updated', { ...updatedTicket, messages });
+    emitSocketEvent('admin', 'ticket_updated', { ...updatedTicket, messages });
 
     if (updatedTicket.user?._id) {
-      io.to(`user:${updatedTicket.user._id}`).emit('ticket_updated', {
+      emitSocketEvent(`user:${updatedTicket.user._id}`, 'ticket_updated', {
         ...updatedTicket,
         messages,
       });
@@ -495,12 +514,15 @@ const updateSupportTicketPriority = async (req, res) => {
 const createSupportTicket = async (req, res) => {
   try {
     const { subject, priority = "medium" } = req.body;
+    const subjectText = String(subject || "").trim();
+    const messageText = String(req.body.message || "").trim();
+    const category = String(req.body.category || "OTHER").toUpperCase();
     // Never trust a client-supplied userId. Anonymous contact submissions stay
     // unowned; authenticated tickets always belong to the authenticated user.
     const userId = req.user?._id || null;
 
     //  REQUIRED FIELD CHECK
-    if (!subject || !req.body.message?.trim()) {
+    if (!subjectText || !messageText) {
       return res.status(400).json({
         success: false,
         message: "Subject and message are required",
@@ -544,6 +566,13 @@ const createSupportTicket = async (req, res) => {
       });
     }
 
+    if (!allowedCategories.includes(category)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid ticket category",
+      });
+    }
+
     const ticket = await AdminSupportTicket.create({
       user: userId || null,
       name: userExists?.name || name,
@@ -552,8 +581,8 @@ const createSupportTicket = async (req, res) => {
       order: mongoose.Types.ObjectId.isValid(req.body.order)
         ? req.body.order
         : null,
-      subject,
-      category: req.body.category || "OTHER",
+      subject: subjectText,
+      category,
       priority: String(priority).toLowerCase(),
       status: "OPEN",
       unreadForAdmin: 1,
@@ -571,7 +600,7 @@ const createSupportTicket = async (req, res) => {
     await createAdminNotification({
       type: "SYSTEM",
       title: "New Support Ticket",
-      message: subject,
+      message: subjectText,
       isRead: false,
       priority: "HIGH",
       ticketId: ticket._id,
@@ -580,7 +609,7 @@ const createSupportTicket = async (req, res) => {
     await AdminSupportMessage.create({
       ticket: ticket._id,
       sender: "user",
-      message: req.body.message.trim(),
+      message: messageText,
       readByUser: true,
     });
 
@@ -588,8 +617,7 @@ const createSupportTicket = async (req, res) => {
       .populate("user", "name email phone")
       .lean();
 
-    const io = getIO();
-    io.to("admin").emit("new_ticket", populatedTicket);
+    emitSocketEvent("admin", "new_ticket", populatedTicket);
 
     return res.json({
       success: true,
@@ -600,13 +628,20 @@ const createSupportTicket = async (req, res) => {
 
     return res.status(500).json({
       success: false,
-      message: error.message || "Failed to create ticket",
+      message: "Unable to submit ticket. Please try again.",
     });
   }
 };
 
 const markSupportTicketReadForUser = async (req, res) => {
   try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid ticket ID",
+      });
+    }
+
     const ticket = await AdminSupportTicket.findById(req.params.id);
 
     if (!ticket) {

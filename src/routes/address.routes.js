@@ -10,7 +10,7 @@ router.get("/", async (req, res) => {
     res.json({ success: true, data });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ success: false, message: err.message });
+    res.status(500).json({ success: false, message: "Unable to load saved addresses." });
   }
 });
 
@@ -22,7 +22,7 @@ router.post("/", async (req, res) => {
     res.json({ success: true, data });
   } catch (err) {
     console.error(err);
-    res.status(400).json({ success: false, message: err.message });
+    res.status(400).json({ success: false, message: "Please check the address details and try again." });
   }
 });
 // DELETE
@@ -32,7 +32,7 @@ router.delete("/:id", async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ success: false, message: err.message });
+    res.status(500).json({ success: false, message: "Unable to remove this address." });
   }
 });
 

@@ -2,17 +2,21 @@ module.exports = (err, req, res, next) => {
   console.error("ERROR:", err.message);
 
   const statusCode = err.statusCode || 500;
+  const isServerError = statusCode >= 500;
 
   const response = {
     success: false,
-    message: err.message || "Internal Server Error",
+    message:
+      process.env.NODE_ENV === "production" && isServerError
+        ? "Something went wrong. Please try again."
+        : err.message || "Internal Server Error",
   };
 
-  if (err.code) {
+  if (!isServerError && err.code) {
     response.code = err.code; // provider / business error code
   }
 
-  if (err.details?.length) {
+  if (!isServerError && err.details?.length) {
     response.details = err.details;
   }
 

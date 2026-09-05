@@ -434,7 +434,7 @@ const createUser = async (req, res) => {
 
     return res.status(400).json({
       success: false,
-      message: error.message,
+      message: "Unable to create user.",
     });
   }
 };
@@ -1295,7 +1295,7 @@ const updateOrderStatus = async (req, res) => {
     });
   } catch (err) {
     console.error("UPDATE STATUS ERROR:", err);
-    res.status(500).json({ message: "Server error", error: err.message });
+    res.status(500).json({ message: "Unable to update order status." });
   }
 };
 
@@ -1818,7 +1818,7 @@ const createAdminRole = async (req, res) => {
     console.error("createAdminRole error:", error);
     return res.status(400).json({
       success: false,
-      message: error.message,
+      message: "Unable to create role.",
     });
   }
 };
@@ -1886,7 +1886,7 @@ const updateAdminRole = async (req, res) => {
     console.error("updateAdminRole error:", error);
     return res.status(400).json({
       success: false,
-      message: error.message,
+      message: "Unable to update role.",
     });
   }
 };
@@ -1933,7 +1933,7 @@ const deleteAdminRole = async (req, res) => {
     console.error("deleteAdminRole error:", error);
     return res.status(400).json({
       success: false,
-      message: error.message,
+      message: "Unable to delete role.",
     });
   }
 };

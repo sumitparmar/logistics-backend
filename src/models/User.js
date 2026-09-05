@@ -107,6 +107,12 @@ const userSchema = new mongoose.Schema(
       enum: ["PERSONAL", "BUSINESS"],
       default: null,
     },
+
+    profilePhoto: {
+      type: String,
+      trim: true,
+      maxlength: 100000,
+    },
   },
   {
     timestamps: true,

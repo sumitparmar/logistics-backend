@@ -102,6 +102,8 @@ const verifyEmailController = async (req, res) => {
 
 const User = require("../models/User");
 
+const PROFILE_PHOTO_MAX_LENGTH = 100000;
+
 const getProfile = async (req, res, next) => {
   try {
     const user = await User.findById(req.user._id).select("-password");
@@ -121,11 +123,30 @@ const updateProfile = async (req, res, next) => {
       return sendError(res, "Phone number must contain exactly 10 digits", 400);
     }
 
+    if (
+      req.body.profilePhoto !== undefined &&
+      req.body.profilePhoto !== "" &&
+      String(req.body.profilePhoto).length > PROFILE_PHOTO_MAX_LENGTH
+    ) {
+      return sendError(res, "Profile photo is too large", 400);
+    }
+
+    if (
+      req.body.profilePhoto !== undefined &&
+      req.body.profilePhoto !== "" &&
+      !/^data:image\/(png|jpeg|jpg|webp);base64,/i.test(String(req.body.profilePhoto))
+    ) {
+      return sendError(res, "Profile photo must be a valid image", 400);
+    }
+
     const updates = {
       name: req.body.name,
       phone: req.body.phone ? normalizePhone(req.body.phone) : undefined,
       businessName: req.body.businessName,
 
+      ...(req.body.profilePhoto !== undefined && {
+        profilePhoto: req.body.profilePhoto,
+      }),
       ...(req.body.deliveryMode && { deliveryMode: req.body.deliveryMode }),
     };
 
@@ -137,6 +158,34 @@ const updateProfile = async (req, res, next) => {
       success: true,
       data: user,
     });
+  } catch (err) {
+    next(err);
+  }
+};
+
+const updateProfilePhoto = async (req, res, next) => {
+  try {
+    const profilePhoto =
+      req.body.profilePhoto === undefined ? "" : String(req.body.profilePhoto);
+
+    if (profilePhoto && profilePhoto.length > PROFILE_PHOTO_MAX_LENGTH) {
+      return sendError(res, "Profile photo is too large", 400);
+    }
+
+    if (
+      profilePhoto &&
+      !/^data:image\/(png|jpeg|jpg|webp);base64,/i.test(profilePhoto)
+    ) {
+      return sendError(res, "Profile photo must be a valid image", 400);
+    }
+
+    const user = await User.findByIdAndUpdate(
+      req.user._id,
+      { profilePhoto },
+      { new: true, runValidators: true },
+    ).select("-password");
+
+    return sendSuccess(res, user, profilePhoto ? "Profile photo updated" : "Profile photo removed");
   } catch (err) {
     next(err);
   }
@@ -264,6 +313,7 @@ module.exports = {
   verifyEmailController,
   getProfile,
   updateProfile,
+  updateProfilePhoto,
   changePassword,
   forgotPassword,
   resetPassword,

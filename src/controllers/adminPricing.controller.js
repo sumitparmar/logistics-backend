@@ -12,7 +12,8 @@ exports.getAdminPricing = async (req, res) => {
 
     res.json(config);
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    console.error("getAdminPricing error:", err.message);
+    res.status(500).json({ message: "Unable to load pricing settings." });
   }
 };
 
@@ -31,6 +32,7 @@ exports.updateAdminPricing = async (req, res) => {
 
     res.json(config);
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    console.error("updateAdminPricing error:", err.message);
+    res.status(500).json({ message: "Unable to save pricing settings." });
   }
 };

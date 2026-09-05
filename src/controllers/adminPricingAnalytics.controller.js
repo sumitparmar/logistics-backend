@@ -61,6 +61,7 @@ exports.getAdminPricingAnalytics = async (req, res) => {
       })),
     });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    console.error("getAdminPricingAnalytics error:", err.message);
+    res.status(500).json({ message: "Unable to load pricing analytics." });
   }
 };
